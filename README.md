@@ -11,6 +11,7 @@ O projeto está na fase inicial. O contexto de negócio e arquitetura foi defini
 | `landing/` | Site público em `https://orientador.connectas.com.br/` |
 | `frontend/` | Aplicação React em `https://orientador.connectas.com.br/app` |
 | `backend/` | API Java 21/Spring Boot em `https://api-orientador.connectas.com.br` |
+| `assets/brand/` | Logo vetorial e ícone do Orientador |
 | `.ai/context/` | Contexto oficial do produto, arquitetura, código e testes |
 | `.agents/skills/` | Fluxo de trabalho assistido pelo God Harness |
 | `docs/legal/` | Minuta de Termos de Uso |

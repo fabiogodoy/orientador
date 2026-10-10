@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="26 26 208 208" role="img" aria-labelledby="title description">
+  <title id="title">Ícone do Orientador</title>
+  <desc id="description">Balão de conversa com uma seta apontando para frente.</desc>
+  <rect x="26" y="26" width="208" height="208" rx="54" fill="#123544"/>
+  <path d="M130 62c-40 0-70 28-70 66 0 20 8 38 23 50l-7 27 30-15c8 3 16 4 24 4 40 0 70-28 70-66s-30-66-70-66Z" fill="none" stroke="#F7FBFA" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m105 151 48-48m-29 0h29v29" fill="none" stroke="#5FE0C1" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
