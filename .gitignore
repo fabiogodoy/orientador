@@ -1,0 +1,41 @@
+# Dependências e builds
+node_modules/
+dist/
+build/
+target/
+out/
+.next/
+.nuxt/
+.turbo/
+
+# Ambientes virtuais
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Variáveis de ambiente e segredos locais (nunca versionar valores reais)
+.env
+.env.local
+.env.*.local
+.env.*
+!.env.example
+
+# Editores e SO
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Logs e temporários
+*.log
+logs/
+tmp/
+.tmp/
+
+# Cobertura de testes
+coverage/
+.nyc_output/
+
+# Cache de skills
+.agents/skills/**/scripts/__pycache__/
