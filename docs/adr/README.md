@@ -12,12 +12,10 @@ Nunca reutilizar um número já listado, mesmo que o trabalho tenha sido feito e
 
 ## Próximo número livre
 
-`ADR-0001`
+`ADR-0002`
 
 ## ADRs registradas
 
 | ADR | Título | Relacionado |
 |---|---|---|
-| — | — | — |
-
-*(tabela vazia — nenhuma ADR criada ainda)*
+| ADR-0001 | Identidade, sessão e tenants | `intent/autenticacao-cadastro.md` |

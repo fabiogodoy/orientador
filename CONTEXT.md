@@ -35,3 +35,11 @@ _Evitar_: gravação
 **Sugestão:**
 Texto apresentado ao usuário durante a reunião para apoiar sua próxima fala ou resposta a uma objeção.
 _Evitar_: resposta obrigatória, decisão automática
+
+**Conta de acesso:**
+Identidade de uma pessoa que entra no Orientador. Não é sinônimo de tenant: uma organização pode ter várias contas de acesso.
+_Evitar_: conta como sinônimo de organização ou espaço de dados
+
+**Período de avaliação:**
+Intervalo gratuito de sete dias concedido ao tenant quando ele é criado. Ao terminar, seus usuários não entram na área autenticada até existir uma forma futura de reativação.
+_Evitar_: assinatura ativa, pagamento ou prazo individual de cada membro

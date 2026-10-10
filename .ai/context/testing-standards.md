@@ -106,26 +106,26 @@ Código sem teste é hipótese. Código validado por testes é evidência. Somen
 
 ## Configuração Específica do Projeto
 
-> Definida no bootstrap de 2026-10-10. Os módulos ainda não têm manifests nem testes; comandos abaixo são o contrato para quando forem criados, não evidência de execução atual.
+> Definida no bootstrap de 2026-10-10 e atualizada com a primeira entrega executável.
 
 ### Ferramentas previstas
 
-* frontend/ e landing/: Vitest e React Testing Library para testes unitários e de componentes.
+* frontend/: Vitest e React Testing Library para testes unitários e de componentes. landing/ segue planejada.
 * backend/: JUnit 5 e Spring Boot Test; Testcontainers com PostgreSQL para testes de integração.
-* Fluxos completos da aplicação: Playwright em navegador desktop com suporte a captura de áudio de aba. A automação de permissões de captura pode exigir validação manual complementar.
+* Fluxos completos da aplicação: Playwright/Chromium. A futura captura de áudio pode exigir validação manual complementar.
 
 ### Build e testes planejados
 
-* frontend/: npm run build e npm test, após a criação do package.json.
-* landing/: npm run build e npm test, após a criação do package.json.
-* backend/: ./mvnw verify, após a criação do Maven Wrapper e do pom.xml.
-* E2E: comando Playwright a ser fixado no package.json quando os primeiros fluxos forem implementados.
+* frontend/: `npm run build` e `npm test`.
+* landing/: `npm run build` e `npm test` quando implementada.
+* backend/: `./mvnw verify` com Java 21 selecionado.
+* E2E: `npm run test:e2e` em frontend/, após builds, com frontend, API e PostgreSQL efêmero ativos. Primeiro uso: `npx playwright install chromium`.
 
-Os comandos ainda não podem ser executados porque os módulos de aplicação serão criados em entregas posteriores. Nenhum sucesso de build ou teste deve ser declarado antes da execução real.
+O sucesso de build e testes em cada entrega deve ser declarado apenas após execução real.
 
 ### Ambiente local e banco autorizado
 
-O usuário informou PostgreSQL local com banco desenv_orientador, usuário postgres e senha vazia para desenvolvimento manual. Não há script de subida da aplicação nem serviço de backend/frontend implementado nesta fase. A CLI psql não foi encontrada no PATH durante o bootstrap, então a conexão com o banco ainda não foi verificada.
+O usuário informou PostgreSQL local com banco desenv_orientador, usuário postgres e senha vazia para desenvolvimento manual. Frontend e backend podem ser iniciados conforme seus READMEs. A CLI psql não foi encontrada no PATH durante o bootstrap. A conexão com `desenv_orientador` não foi verificada por esta entrega; a execução E2E usou PostgreSQL efêmero e separado.
 
 Testes de integração que escrevem no banco devem usar exclusivamente um PostgreSQL efêmero de Testcontainers. É proibido apontá-los para desenv_orientador, homologação, produção ou qualquer banco persistente. Docker precisa estar disponível para esses testes. Antes de build do backend, o terminal deve selecionar Java 21; Java 8 é o padrão atual do PATH.
 

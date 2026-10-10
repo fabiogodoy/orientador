@@ -1,6 +1,6 @@
 # Termos de Uso do Orientador
 
-*Minuta de 10 de outubro de 2026. Este texto entrará em vigor quando for publicado e aceito na plataforma.*
+*Versão 2026-10-10. Estes Termos entram em vigor para cada usuário quando publicados na plataforma e aceitos no cadastro.*
 
 ## 1. Quem oferece o serviço
 
@@ -36,9 +36,11 @@ Não há exclusão automática das transcrições. O titular pode pedir acesso, 
 
 Transcrições e sugestões podem conter erros, omissões ou interpretações inadequadas. O usuário deve revisar o conteúdo e é responsável pelas decisões e falas que adotar. O Orientador não substitui aconselhamento profissional, nem promete resultados em negociações, vendas ou outras reuniões.
 
-## 7. Planos e cancelamento
+## 7. Avaliação, planos e cancelamento
 
-Preços, periodicidade, limites, forma de pagamento e condições de cancelamento serão apresentados antes de qualquer contratação paga. Organizações podem ter condições comerciais diferentes das contas individuais. Nenhuma cobrança decorre apenas da leitura desta minuta.
+O cadastro de um usuário individual ou de uma organização inicia um período gratuito de sete dias (168 horas) para seu espaço de dados. Não há cobrança automática. Ao terminar esse período, o login e o acesso à área autenticada ficam bloqueados até que exista e seja concluída uma forma de contratação ou reativação. Nesta fase não há contratação, renovação ou reativação automática disponível. O contato público permanece disponível para solicitações relativas a dados pessoais.
+
+Preços, periodicidade, limites, forma de pagamento e condições de cancelamento serão apresentados antes de qualquer contratação paga. Organizações podem ter condições comerciais diferentes das contas individuais.
 
 ## 8. Disponibilidade e responsabilidade
 

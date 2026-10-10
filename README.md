@@ -2,7 +2,7 @@
 
 Orientador é um assistente para reuniões online. A proposta é transcrever, em tempo real, o áudio da aba da reunião e do microfone do usuário e sugerir falas e respostas a objeções.
 
-O projeto está na fase inicial. O contexto de negócio e arquitetura foi definido, mas ainda não há telas nem código executável da aplicação.
+O projeto está na fase inicial. Cadastro, login e Termos de Uso já foram implementados; captura de reuniões e transcrição ainda não foram.
 
 ## Estrutura
 
@@ -14,7 +14,7 @@ O projeto está na fase inicial. O contexto de negócio e arquitetura foi defini
 | `assets/brand/` | Logo vetorial e ícone do Orientador |
 | `.ai/context/` | Contexto oficial do produto, arquitetura, código e testes |
 | `.agents/skills/` | Fluxo de trabalho assistido pelo God Harness |
-| `docs/legal/` | Minuta de Termos de Uso |
+| `docs/legal/` | Texto-fonte dos Termos de Uso exibidos em `/app/termos` |
 
 O glossário do produto está em `CONTEXT.md`. As regras de trabalho estão em `AGENTS.md`.
 
@@ -23,13 +23,26 @@ O glossário do produto está em `CONTEXT.md`. As regras de trabalho estão em `
 * PostgreSQL: banco `desenv_orientador`, usuário `postgres`, sem senha.
 * Java 21 está instalado, mas o terminal seleciona Java 8 por padrão.
 * Node.js, npm, Maven e Docker estão disponíveis.
-* A CLI `psql` não está no PATH; a conexão com o banco ainda não foi verificada.
+* A CLI `psql` não está no PATH; os testes de integração usam PostgreSQL efêmero de Testcontainers, não o banco `desenv_orientador`.
 
-O arquivo `backend/.env.example` documenta as variáveis previstas para o backend. Não há aplicação configurada para consumi-las nesta fase. Nunca versionar uma chave real da xAI.
+O arquivo `backend/.env.example` documenta as variáveis locais. Nunca versionar uma chave real da xAI.
+
+## Executar localmente
+
+1. Confira que `desenv_orientador` existe no PostgreSQL local. A API aplica a migration Flyway automaticamente ao iniciar.
+2. No terminal do `backend/`, selecione Java 21, configure `SESSION_COOKIE_SECURE=false` e rode `./mvnw spring-boot:run`. O padrão local do banco é `jdbc:postgresql://localhost:5432/desenv_orientador`, usuário `postgres`, senha vazia. Para outra configuração, use `DB_URL`, `DB_USER` e `DB_PASSWORD` ou as propriedades `SPRING_DATASOURCE_*` existentes.
+3. No terminal do `frontend/`, rode `npm ci` e `npm run dev`. Acesse `http://localhost:5173/app/cadastro` ou `http://localhost:5173/app/login`.
+
+Em produção, mantenha `SESSION_COOKIE_SECURE=true`, configure `FRONTEND_ORIGIN` com a origem HTTPS exata e sirva todas as rotas `/app/*` com fallback para o `index.html` do frontend. O certificado HTTPS de `api-orientador.connectas.com.br` ainda precisa ser corrigido antes de qualquer publicação. Esta entrega **não** publica a aplicação em produção.
+
+## Validar
+
+* `backend/`: Java 21 e `./mvnw verify` (inclui testes com PostgreSQL efêmero e exige Docker).
+* `frontend/`: `npm run build`, `npm test` e `npm run test:e2e` com API, frontend e PostgreSQL efêmero ativos. Para o primeiro E2E, instale o navegador com `npx playwright install chromium`.
 
 ## Próximas entregas
 
-As telas, o backend, as migrations e os testes serão criados em demandas específicas. Cada entrega seguirá o processo de `AGENTS.md`. Nenhum comando de build ou teste da aplicação existe até que os módulos sejam implementados.
+As próximas telas e funcionalidades serão criadas por demanda, seguindo `AGENTS.md`. Convites, outros membros, cobrança, renovação, e-mails e admin da plataforma permanecem fora desta primeira entrega.
 
 ## Origem do processo
 

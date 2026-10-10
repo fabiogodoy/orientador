@@ -36,6 +36,9 @@ tmp/
 # Cobertura de testes
 coverage/
 .nyc_output/
+*.tsbuildinfo
+playwright-report/
+test-results/
 
 # Cache de skills
 .agents/skills/**/scripts/__pycache__/

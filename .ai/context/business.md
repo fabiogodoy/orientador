@@ -27,6 +27,8 @@ Organizações são o plano para grupos com mais de três usuários. Os valores 
 
 Assinatura para usuários individuais e organizações, com custo por usuário menor no plano organizacional. Cobrança, planos, limites e cancelamento serão especificados antes da implementação comercial.
 
+O cadastro inicial de individuais e organizações inicia uma avaliação gratuita de sete dias (168 horas), sem cobrança automática. Ao expirar, login e área autenticada são bloqueados; ainda não há contratação ou renovação implementada. A primeira pessoa que cadastra uma organização é seu gestor inicial. A gestão de outros membros virá depois.
+
 ## Dados e confiança
 
 O produto guarda transcrições, mas não gravações de áudio ou vídeo. As sugestões em tempo real não serão persistidas na primeira versão. Não haverá exclusão automática das transcrições; os titulares poderão solicitar exclusão conforme a legislação aplicável. O serviço deve informar com clareza a captura, o uso da xAI/Grok e o acesso autorizado aos conteúdos.

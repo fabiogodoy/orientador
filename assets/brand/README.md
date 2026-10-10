@@ -3,6 +3,7 @@
 O símbolo combina um balão de conversa com uma seta de orientação. A marca foi criada em SVG para manter nitidez na landing, na aplicação e em tamanhos pequenos.
 
 * `orientador-logo.svg`: versão horizontal com nome, para cabeçalhos e materiais.
+* `orientador-logo-light.svg`: versão horizontal com nome claro para fundos escuros.
 * `orientador-icon.svg`: símbolo quadrado, para favicon e ícone da aplicação.
 * `orientador-logo-preview.png`: prévia em PNG sobre fundo branco; para uso em outros fundos, prefira o SVG.
 

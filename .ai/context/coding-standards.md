@@ -158,7 +158,7 @@ Sempre preferir código simples funcionando a código sofisticado difícil de ma
 
 ## Convenções Específicas do Projeto
 
-> Definidas no bootstrap de 2026-10-10. As ferramentas e pastas de código serão instaladas nas entregas específicas; este documento não afirma que já existam manifests ou código executável.
+> Definidas no bootstrap de 2026-10-10 e atualizadas com a primeira entrega de autenticação.
 
 ### Módulos e linguagem
 
@@ -180,4 +180,4 @@ Usar npm nos módulos web e Maven no backend. Adicionar bibliotecas apenas quand
 
 ### Estado atual do ambiente
 
-O banco local informado é desenv_orientador, com usuário postgres e senha vazia. Essa configuração é apenas de desenvolvimento; produção e homologação terão credenciais e bases próprias. O terminal atual encontra Java 8 por padrão, embora Java 21 esteja instalado: selecionar explicitamente o JDK 21 antes de compilar o backend.
+O banco local informado é desenv_orientador, com usuário postgres e senha vazia. Essa configuração é apenas de desenvolvimento; produção e homologação terão credenciais e bases próprias. O terminal atual encontra Java 8 por padrão, embora Java 21 esteja instalado: selecionar explicitamente o JDK 21 antes de compilar o backend. A aplicação usa Spring Boot 4.1.1, Vite 8 e sessão HttpOnly com CSRF conforme ADR-0001.
