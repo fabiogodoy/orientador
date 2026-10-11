@@ -55,8 +55,9 @@ O áudio real não foi incluído em teste automatizado para não enviar ou regis
 
 * **Branch de entrega:** `codex/transcricao-microfone-tempo-real`
 * **Main de origem:** `57cb149183abba1068a4ed1bad0f42dd69f2964f`
-* **Tipo de integração:** pendente de conclusão de reintegração.
-* **SHA final e push:** pendentes de conclusão de reintegração.
+* **Tipo de integração:** fast-forward.
+* **SHA da main que recebeu a entrega:** `80311325471c8380e4965d31f32c2a3f11202ad9`.
+* **Evidência de publicação:** `git push origin main` concluído com sucesso (`57cb149..8031132`).
 
 ## Pendências externas ao escopo
 
