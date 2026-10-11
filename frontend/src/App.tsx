@@ -229,7 +229,7 @@ function HomePage() {
   const [expandedSuggestion, setExpandedSuggestion] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [liveMessages, setLiveMessages] = useState<{ speaker: TranscriptSpeaker; time: string; text: string }[]>([])
+  const [liveMessages, setLiveMessages] = useState<{ speaker: TranscriptSpeaker; time: string; text: string; source: AudioSource }[]>([])
   const [partialTranscripts, setPartialTranscripts] = useState<Record<AudioSource, string>>({ microphone: '', tab: '' })
   const sourceCaptures = useRef<Record<AudioSource, SourceCapture | null>>({ microphone: null, tab: null })
   const callSessionId = useRef<string | null>(null)
@@ -329,7 +329,7 @@ function HomePage() {
         const text = message.transcript.trim()
         const sequenceNumber = nextSegment.current++
         const speaker = speakerForSource[source]
-        setLiveMessages(current => [...current, { speaker, time: formatDuration(elapsedSecondsRef.current), text }])
+        setLiveMessages(current => [...current, { speaker, time: formatDuration(elapsedSecondsRef.current), text, source }])
         setPartialTranscripts(current => ({ ...current, [source]: '' }))
         void api.saveTranscriptSegment(sessionId, sequenceNumber, text, apiSpeakerForSource(source)).catch(() => setError('A fala foi transcrita, mas não pôde ser salva no histórico.'))
       }
@@ -439,7 +439,7 @@ function HomePage() {
           <p className="call-start">Hoje · 09:30 <span>•</span> {isCallActive ? 'Transcrição em tempo real' : 'Aguardando início da call'}</p>
           {displayedTranscript.map((message, index) => <article className={`message-row ${message.speaker === 'you' ? 'from-you' : 'from-client'}`} key={`${message.time}-${index}`}>
             {message.speaker === 'client' && <span className="message-avatar" aria-hidden="true">RC</span>}
-            <div className="message-content"><div className="message-meta"><strong>{message.speaker === 'you' ? 'Você' : 'Rafaela'}</strong><time>{message.time}</time></div><p>{message.text}</p></div>
+            <div className="message-content"><div className="message-meta"><strong>{message.speaker === 'you' ? 'Você' : ('source' in message && message.source === 'tab' ? 'Cliente' : 'Rafaela')}</strong><time>{message.time}</time></div><p>{message.text}</p></div>
             {message.speaker === 'you' && <span className="message-avatar you-avatar" aria-hidden="true">VO</span>}
           </article>)}
           {partialTranscripts.microphone && <article className="message-row from-you"><div className="message-content"><div className="message-meta"><strong>Você</strong><time>agora</time></div><p>{partialTranscripts.microphone}</p></div><span className="message-avatar you-avatar" aria-hidden="true">VO</span></article>}

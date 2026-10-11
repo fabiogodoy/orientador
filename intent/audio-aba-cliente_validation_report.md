@@ -41,7 +41,9 @@ O navegador pode devolver display sem áudio mesmo quando o usuário o solicita;
 
 * **Branch:** `codex/audio-aba-cliente`
 * **Main de origem:** `1b0085cc174f2343bc89c3c5a4a6ea2189483687`
-* **Tipo, SHA final e push:** pendentes de reintegração.
+* **Tipo:** fast-forward.
+* **SHA da main que recebeu a entrega:** `044cd8438bed2f422c054f35d1d110af39f5e360`.
+* **Evidência de push:** `git push origin main` concluído com sucesso (`1b0085c..044cd84`).
 
 ## Parecer final
 
