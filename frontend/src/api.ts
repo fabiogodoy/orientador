@@ -20,6 +20,7 @@ export type Registration = {
   termsAccepted: boolean
   termsVersion: string
 }
+export type CallSession = { sessionId: string; clientSecret: string }
 
 const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.PROD
   ? 'https://api-orientador.connectas.com.br' : 'http://localhost:8080')
@@ -73,4 +74,7 @@ export const api = {
     await request<void>('/api/auth/logout', 'POST')
     csrfToken = null
   },
+  startCall: () => request<CallSession>('/api/calls', 'POST'),
+  saveTranscriptSegment: (sessionId: string, sequenceNumber: number, text: string) => request<void>(`/api/calls/${sessionId}/segments`, 'POST', { sequenceNumber, text }),
+  endCall: (sessionId: string) => request<void>(`/api/calls/${sessionId}/end`, 'POST'),
 }

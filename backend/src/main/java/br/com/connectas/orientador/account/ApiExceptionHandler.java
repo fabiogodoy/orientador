@@ -1,6 +1,8 @@
 package br.com.connectas.orientador.account;
 
 import java.util.Map;
+import br.com.connectas.orientador.call.CallService;
+import br.com.connectas.orientador.call.OpenAiRealtimeClient;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -38,6 +40,16 @@ public class ApiExceptionHandler {
     @ExceptionHandler(AuthController.TooManyAttemptsException.class)
     ResponseEntity<Map<String, String>> tooManyAttempts() {
         return error(HttpStatus.TOO_MANY_REQUESTS, "TOO_MANY_ATTEMPTS", "Muitas tentativas. Tente novamente em 15 minutos.");
+    }
+
+    @ExceptionHandler(CallService.CallNotFoundException.class)
+    ResponseEntity<Map<String, String>> callNotFound() {
+        return error(HttpStatus.NOT_FOUND, "CALL_NOT_FOUND", "Esta call não está disponível.");
+    }
+
+    @ExceptionHandler(OpenAiRealtimeClient.RealtimeUnavailableException.class)
+    ResponseEntity<Map<String, String>> realtimeUnavailable() {
+        return error(HttpStatus.SERVICE_UNAVAILABLE, "REALTIME_UNAVAILABLE", "A transcrição em tempo real não está disponível agora.");
     }
 
     private static ResponseEntity<Map<String, String>> error(HttpStatus status, String code, String message) {

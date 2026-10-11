@@ -14,6 +14,7 @@ import java.net.http.HttpResponse;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.sql.Timestamp;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
@@ -159,6 +160,25 @@ class AuthIntegrationTest {
                 .headers().firstValue("Access-Control-Allow-Origin").orElse(null));
         assertTrue(client.send(foreign, HttpResponse.BodyHandlers.ofString())
                 .headers().firstValue("Access-Control-Allow-Origin").isEmpty());
+    }
+
+    @Test
+    void finalizedTranscriptIsPersistedForTheAuthenticatedCallOnly() throws Exception {
+        String ownerEmail = uniqueEmail();
+        register(ownerEmail, "INDIVIDUAL", null, true, AccountService.TERMS_VERSION);
+        assertEquals(200, post("/api/auth/login", loginJson(ownerEmail)).statusCode());
+        UUID ownerId = jdbc.queryForObject("SELECT id FROM users WHERE email=?", UUID.class, ownerEmail);
+        UUID tenantId = jdbc.queryForObject("SELECT tenant_id FROM users WHERE email=?", UUID.class, ownerEmail);
+        UUID callId = UUID.randomUUID();
+        jdbc.update("INSERT INTO call_sessions (id, tenant_id, user_id, status, started_at) VALUES (?, ?, ?, 'ACTIVE', ?)", callId, tenantId, ownerId, Timestamp.from(START));
+
+        HttpResponse<String> persisted = post("/api/calls/" + callId + "/segments", "{\"sequenceNumber\":1,\"text\":\" Trecho final da conversa. \"}");
+        assertEquals(204, persisted.statusCode(), persisted.body());
+        assertEquals("Trecho final da conversa.", jdbc.queryForObject("SELECT text FROM transcript_segments WHERE call_session_id=?", String.class, callId));
+        assertEquals(204, post("/api/calls/" + callId + "/end", "{}").statusCode());
+        assertEquals("ENDED", jdbc.queryForObject("SELECT status FROM call_sessions WHERE id=?", String.class, callId));
+        assertEquals(404, post("/api/calls/" + callId + "/segments", "{\"sequenceNumber\":2,\"text\":\"Não deve entrar.\"}").statusCode());
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM transcript_segments WHERE call_session_id=?", Integer.class, callId));
     }
 
     private HttpResponse<String> register(String email, String type, String organization, boolean accepted, String version) throws Exception {

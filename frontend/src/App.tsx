@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import logoUrl from '../../assets/brand/orientador-logo.svg'
 import logoLightUrl from '../../assets/brand/orientador-logo-light.svg'
@@ -213,7 +213,7 @@ function formatDuration(totalSeconds: number) {
 function HomePage() {
   const [account, setAccount] = useState<Account | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [isCallActive, setIsCallActive] = useState(true)
+  const [isCallActive, setIsCallActive] = useState(false)
   const [microphoneOn, setMicrophoneOn] = useState(true)
   const [tabAudioOn, setTabAudioOn] = useState(true)
   const [elapsedSeconds, setElapsedSeconds] = useState(1002)
@@ -221,6 +221,12 @@ function HomePage() {
   const [expandedSuggestion, setExpandedSuggestion] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [liveMessages, setLiveMessages] = useState<{ speaker: 'you'; time: string; text: string }[]>([])
+  const [partialTranscript, setPartialTranscript] = useState('')
+  const peerConnection = useRef<RTCPeerConnection | null>(null)
+  const microphoneStream = useRef<MediaStream | null>(null)
+  const callSessionId = useRef<string | null>(null)
+  const nextSegment = useRef(1)
   useEffect(() => {
     api.me().then(setAccount).catch(cause => {
       if (cause instanceof ApiError && cause.code === 'TRIAL_EXPIRED') {
@@ -248,10 +254,64 @@ function HomePage() {
     }
   }
 
+  function stopLocalMedia() {
+    microphoneStream.current?.getTracks().forEach(track => track.stop())
+    microphoneStream.current = null
+    peerConnection.current?.close()
+    peerConnection.current = null
+    setPartialTranscript('')
+  }
+
+  function toggleMicrophone() {
+    setMicrophoneOn(current => {
+      const next = !current
+      microphoneStream.current?.getAudioTracks().forEach(track => { track.enabled = next })
+      return next
+    })
+  }
+
+  async function toggleCall() {
+    if (isCallActive) {
+      const sessionId = callSessionId.current
+      stopLocalMedia(); setIsCallActive(false); callSessionId.current = null
+      if (sessionId) await api.endCall(sessionId).catch(() => setError('A captura foi encerrada localmente, mas não foi possível finalizar o histórico agora.'))
+      return
+    }
+    if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) { setError('Este navegador não suporta a captura de microfone em tempo real.'); return }
+    try {
+      setError(null)
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      stream.getAudioTracks().forEach(track => { track.enabled = microphoneOn })
+      microphoneStream.current = stream
+      const session = await api.startCall(); callSessionId.current = session.sessionId
+      const connection = new RTCPeerConnection(); peerConnection.current = connection
+      stream.getAudioTracks().forEach(track => connection.addTrack(track, stream))
+      const channel = connection.createDataChannel('oai-events')
+      channel.onmessage = event => {
+        const message = JSON.parse(event.data) as { type?: string; delta?: string; transcript?: string }
+        if (message.type === 'conversation.item.input_audio_transcription.delta') setPartialTranscript(current => current + (message.delta ?? ''))
+        if (message.type === 'conversation.item.input_audio_transcription.completed' && message.transcript?.trim()) {
+          const text = message.transcript.trim(); const sequenceNumber = nextSegment.current++
+          setLiveMessages(current => [...current, { speaker: 'you', time: formatDuration(elapsedSeconds), text }]); setPartialTranscript('')
+          void api.saveTranscriptSegment(session.sessionId, sequenceNumber, text).catch(() => setError('A fala foi transcrita, mas não pôde ser salva no histórico.'))
+        }
+      }
+      const offer = await connection.createOffer(); await connection.setLocalDescription(offer)
+      const response = await fetch('https://api.openai.com/v1/realtime/calls', { method: 'POST', headers: { Authorization: `Bearer ${session.clientSecret}`, 'Content-Type': 'application/sdp' }, body: offer.sdp })
+      if (!response.ok) throw new Error('Falha ao iniciar a transcrição em tempo real.')
+      await connection.setRemoteDescription({ type: 'answer', sdp: await response.text() })
+      setElapsedSeconds(0); setIsCallActive(true)
+    } catch (cause) {
+      stopLocalMedia(); callSessionId.current = null
+      setError(cause instanceof DOMException && cause.name === 'NotAllowedError' ? 'Permita o microfone para iniciar a transcrição.' : 'Não foi possível iniciar a transcrição agora. Tente novamente.')
+    }
+  }
+
   if (!account) return <div className="loading-page" role="status">{error ?? 'Carregando seu espaço…'}</div>
   const currentSuggestion = suggestions[0]
   const currentAnswer = currentSuggestion.answers[suggestionVersion]
-  const callStatus = isCallActive ? 'Call em andamento' : 'Call encerrada'
+  const callStatus = isCallActive ? 'Microfone sendo transcrito' : 'Call encerrada'
+  const displayedTranscript = liveMessages.length ? liveMessages : transcript
 
   return <div className="call-page">
     <header className="call-topbar">
@@ -263,11 +323,11 @@ function HomePage() {
         <div className="client-identity"><span className="client-avatar">RC</span><span><strong>Rafaela Costa</strong><small>Diretora comercial · Orbit</small></span></div>
       </div>
       <div className="call-actions">
-        <button type="button" className={`icon-control ${microphoneOn ? 'is-on' : ''}`} aria-label={microphoneOn ? 'Desativar microfone simulado' : 'Ativar microfone simulado'} aria-pressed={microphoneOn} onClick={() => setMicrophoneOn(value => !value)}><Icon name="microphone" /></button>
+        <button type="button" className={`icon-control ${microphoneOn ? 'is-on' : ''}`} aria-label={microphoneOn ? 'Desativar microfone' : 'Ativar microfone'} aria-pressed={microphoneOn} onClick={toggleMicrophone}><Icon name="microphone" /></button>
         <button type="button" className={`icon-control ${tabAudioOn ? 'is-on' : ''}`} aria-label={tabAudioOn ? 'Desativar áudio da aba simulado' : 'Ativar áudio da aba simulado'} aria-pressed={tabAudioOn} onClick={() => setTabAudioOn(value => !value)}><Icon name="tabAudio" /></button>
         <button type="button" className="suggest-button" disabled={!isCallActive} onClick={() => setSuggestionVersion(value => (value + 1) % currentSuggestion.answers.length)}><Icon name="sparkles" />Sugerir agora</button>
-        <button type="button" className={`end-button ${isCallActive ? '' : 'restart-button'}`} onClick={() => setIsCallActive(value => !value)}><Icon name="phone" />{isCallActive ? 'Encerrar call' : 'Iniciar call'}</button>
-        <div className="settings-wrap"><button type="button" className="icon-control" aria-label="Abrir configurações da demonstração" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(value => !value)}><Icon name="settings" /></button>{settingsOpen && <div className="settings-popover"><strong>Modo demonstração</strong><span>Controles e conteúdo são simulados localmente.</span><button type="button" className="logout-button" onClick={logout}>Sair da conta <span aria-hidden="true">↗</span></button></div>}</div>
+        <button type="button" className={`end-button ${isCallActive ? '' : 'restart-button'}`} onClick={() => void toggleCall()}><Icon name="phone" />{isCallActive ? 'Encerrar call' : 'Iniciar call'}</button>
+        <div className="settings-wrap"><button type="button" className="icon-control" aria-label="Abrir configurações da call" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(value => !value)}><Icon name="settings" /></button>{settingsOpen && <div className="settings-popover"><strong>Privacidade da call</strong><span>O áudio serve apenas à transcrição em tempo real; o Orientador mantém somente o texto final.</span><button type="button" className="logout-button" onClick={logout}>Sair da conta <span aria-hidden="true">↗</span></button></div>}</div>
       </div>
     </header>
 
@@ -275,15 +335,16 @@ function HomePage() {
       <section className="workspace-panel transcript-panel" aria-labelledby="transcript-title">
         <header className="panel-header"><div><span className="panel-kicker"><Icon name="transcript" size={17} />Transcrição ao vivo</span><h1 id="transcript-title">A conversa, no ritmo da call.</h1></div><span className="demo-label">Demonstração</span></header>
         <div className="transcript-scroll">
-          <p className="call-start">Hoje · 09:30 <span>•</span> Transcrição simulada</p>
-          {transcript.map((message, index) => <article className={`message-row ${message.speaker === 'you' ? 'from-you' : 'from-client'}`} key={`${message.time}-${index}`}>
+          <p className="call-start">Hoje · 09:30 <span>•</span> {isCallActive ? 'Transcrição em tempo real' : 'Aguardando início da call'}</p>
+          {displayedTranscript.map((message, index) => <article className={`message-row ${message.speaker === 'you' ? 'from-you' : 'from-client'}`} key={`${message.time}-${index}`}>
             {message.speaker === 'client' && <span className="message-avatar" aria-hidden="true">RC</span>}
             <div className="message-content"><div className="message-meta"><strong>{message.speaker === 'you' ? 'Você' : 'Rafaela'}</strong><time>{message.time}</time></div><p>{message.text}</p></div>
             {message.speaker === 'you' && <span className="message-avatar you-avatar" aria-hidden="true">VO</span>}
           </article>)}
-          {isCallActive && <div className="typing-line"><span /><span /><span /> Escutando a conversa…</div>}
+          {partialTranscript && <article className="message-row from-you"><div className="message-content"><div className="message-meta"><strong>Você</strong><time>agora</time></div><p>{partialTranscript}</p></div><span className="message-avatar you-avatar" aria-hidden="true">VO</span></article>}
+          {isCallActive && <div className="typing-line"><span /><span /><span /> Escutando e transcrevendo seu microfone…</div>}
         </div>
-        <footer className="panel-footer"><span><Icon name="sound" size={16} />{tabAudioOn ? 'Áudio da aba simulado' : 'Áudio da aba pausado'}</span><span>Português (Brasil)</span></footer>
+        <footer className="panel-footer"><span><Icon name="sound" size={16} />{tabAudioOn ? 'Áudio da aba: em breve' : 'Áudio da aba desativado'}</span><span>Português (Brasil)</span></footer>
       </section>
 
       <section className="workspace-panel guidance-panel" aria-labelledby="guidance-title">
@@ -300,7 +361,7 @@ function HomePage() {
         </div>
       </section>
     </main>
-    <div className="call-bottom-note">Simulação visual — nenhum áudio é capturado, enviado ou armazenado nesta etapa.</div>
+    <div className="call-bottom-note">Ao iniciar, seu microfone é enviado à OpenAI para transcrição em tempo real. O Orientador salva somente o texto final.</div>
   </div>
 }
 

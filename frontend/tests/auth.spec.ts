@@ -21,7 +21,7 @@ test('cadastro individual, termos, login e saída', async ({ page }) => {
   await page.getByRole('button', { name: /Entrar na minha conta/ }).click()
   await expect(page.getByRole('heading', { name: 'A conversa, no ritmo da call.' })).toBeVisible()
   await expect(page.getByText('Rafaela Costa')).toBeVisible()
-  await page.getByRole('button', { name: 'Abrir configurações da demonstração' }).click()
+  await page.getByRole('button', { name: 'Abrir configurações da call' }).click()
   await page.getByRole('button', { name: /Sair da conta/ }).click()
   await expect(page).toHaveURL(/\/app\/login$/)
 })
@@ -42,7 +42,7 @@ test('cadastro organizacional cria o primeiro gestor', async ({ page }) => {
   await page.getByLabel('Senha').fill(password)
   await page.getByRole('button', { name: /Entrar na minha conta/ }).click()
   await expect(page.getByRole('heading', { name: 'Próxima melhor resposta' })).toBeVisible()
-  await expect(page.getByText('Simulação visual — nenhum áudio é capturado, enviado ou armazenado nesta etapa.')).toBeVisible()
+  await expect(page.getByText(/Ao iniciar, seu microfone é enviado à OpenAI para transcrição em tempo real/)).toBeVisible()
 })
 
 test('cadastro móvel não envia sem aceite e não tem rolagem horizontal', async ({ page }) => {
@@ -58,7 +58,7 @@ test('cadastro móvel não envia sem aceite e não tem rolagem horizontal', asyn
   await expect(page.getByRole('link', { name: 'Termos de Uso' }).first()).toBeVisible()
 })
 
-test('tela da call mockada alterna controles e adapta o layout sem depender da API real', async ({ page }, testInfo) => {
+test('tela da call alterna controles e adapta o layout sem depender da API real', async ({ page }, testInfo) => {
   await page.route('**/api/auth/me', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -70,8 +70,8 @@ test('tela da call mockada alterna controles e adapta o layout sem depender da A
   await page.goto('/app/')
   await expect(page.getByRole('heading', { name: 'A conversa, no ritmo da call.' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Próxima melhor resposta' })).toBeVisible()
-  await page.getByRole('button', { name: 'Desativar microfone simulado' }).click()
-  await expect(page.getByRole('button', { name: 'Ativar microfone simulado' })).toHaveAttribute('aria-pressed', 'false')
+  await page.getByRole('button', { name: 'Desativar microfone' }).click()
+  await expect(page.getByRole('button', { name: 'Ativar microfone' })).toHaveAttribute('aria-pressed', 'false')
   await page.getByRole('button', { name: 'Gerar outra' }).click()
   await expect(page.getByText(/Antes de comparar apenas o valor/)).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath('tela-call-desktop.png'), fullPage: true })

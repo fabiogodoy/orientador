@@ -12,10 +12,11 @@ Nunca reutilizar um número já listado, mesmo que o trabalho tenha sido feito e
 
 ## Próximo número livre
 
-`ADR-0002`
+`ADR-0003`
 
 ## ADRs registradas
 
 | ADR | Título | Relacionado |
 |---|---|---|
 | ADR-0001 | Identidade, sessão e tenants | `intent/autenticacao-cadastro.md` |
+| ADR-0002 | Transcrição Realtime OpenAI com segredo efêmero | `intent/transcricao-microfone-tempo-real.md` |

@@ -68,7 +68,7 @@ describe('tela principal de call', () => {
     window.history.replaceState({}, '', '/app/')
   })
 
-  it('exibe a conversa, orientação e controles simulados sem iniciar integração de mídia', async () => {
+  it('exibe a conversa, orientação e controles de captura sem iniciar a mídia', async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(account), { status: 200 }))
     vi.stubGlobal('fetch', fetch)
     render(<App />)
@@ -76,14 +76,13 @@ describe('tela principal de call', () => {
     expect(await screen.findByRole('heading', { name: 'A conversa, no ritmo da call.' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Próxima melhor resposta' })).toBeInTheDocument()
     expect(screen.getAllByText('Rafaela').length).toBeGreaterThan(0)
-    expect(screen.getByText('Simulação visual — nenhum áudio é capturado, enviado ou armazenado nesta etapa.')).toBeInTheDocument()
+    expect(screen.getByText(/Ao iniciar, seu microfone é enviado à OpenAI para transcrição em tempo real/)).toBeInTheDocument()
 
-    const microphone = screen.getByRole('button', { name: 'Desativar microfone simulado' })
+    const microphone = screen.getByRole('button', { name: 'Desativar microfone' })
     expect(microphone).toHaveAttribute('aria-pressed', 'true')
     fireEvent.click(microphone)
-    expect(screen.getByRole('button', { name: 'Ativar microfone simulado' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Ativar microfone' })).toHaveAttribute('aria-pressed', 'false')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Encerrar call' }))
     expect(screen.getByRole('button', { name: 'Iniciar call' })).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledTimes(1)
   })

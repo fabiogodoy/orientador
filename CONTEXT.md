@@ -43,3 +43,19 @@ _Evitar_: conta como sinônimo de organização ou espaço de dados
 **Período de avaliação:**
 Intervalo gratuito de sete dias concedido ao tenant quando ele é criado. Ao terminar, seus usuários não entram na área autenticada até existir uma forma futura de reativação.
 _Evitar_: assinatura ativa, pagamento ou prazo individual de cada membro
+
+**Sessão de call:**
+Intervalo iniciado e encerrado conscientemente pelo usuário autenticado para captar um fluxo de áudio autorizado.
+_Evitar_: gravação como sinônimo de sessão
+
+**Segmento de transcrição:**
+Trecho textual finalizado por detecção de fala dentro de uma sessão de call. É persistido; áudio bruto não é.
+_Evitar_: chunk de áudio
+
+**Transcrição parcial:**
+Texto transitório recebido enquanto a pessoa fala. Nunca é persistido como segmento final.
+_Evitar_: transcrição salva
+
+**Segredo efêmero:**
+Credencial de curta duração e escopo de uma sessão, emitida pelo backend para o navegador conectar ao provedor de transcrição sem receber a chave permanente.
+_Evitar_: chave OpenAI
