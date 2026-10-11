@@ -35,4 +35,8 @@ A permissão física de microfone e a frase efetivamente capturada precisam de c
 
 ## Reintegração
 
-Pendente de commit e integração da branch `codex/transcricao-operacional` na main.
+* **Branch de origem:** `codex/transcricao-operacional`.
+* **Main de origem:** `ae39a246f292814c2dc3ccfeceac00fa76d58aea`.
+* **Tipo:** fast-forward.
+* **SHA da main que recebeu a entrega:** `6c0df818a246841e9cb8a5a95bd5fbbdfa21bd3e`.
+* **Publicação:** `git push origin main` concluído com sucesso (`ae39a24..6c0df81`).
