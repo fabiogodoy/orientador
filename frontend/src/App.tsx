@@ -162,9 +162,65 @@ function TermsPage() {
   </div>
 }
 
+type IconName = 'microphone' | 'tabAudio' | 'sparkles' | 'phone' | 'settings' | 'copy' | 'chevron' | 'transcript' | 'clock' | 'sound'
+
+function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
+  const common = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.9, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true }
+  if (name === 'microphone') return <svg {...common}><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" /></svg>
+  if (name === 'tabAudio') return <svg {...common}><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4M8.5 10.5h2l2-2v5l-2-2h-2zM15.5 9.5a3 3 0 0 1 0 4" /></svg>
+  if (name === 'sparkles') return <svg {...common}><path d="m12 3 1.45 4.55L18 9l-4.55 1.45L12 15l-1.45-4.55L6 9l4.55-1.45L12 3ZM19 15l.72 2.28L22 18l-2.28.72L19 21l-.72-2.28L16 18l2.28-.72L19 15Z" /><path d="m5 15 .55 1.45L7 17l-1.45.55L5 19l-.55-1.45L3 17l1.45-.55L5 15Z" /></svg>
+  if (name === 'phone') return <svg {...common}><path d="M7.3 3.5 4.9 4.6c-.8.38-1.18 1.28-.87 2.12 2.02 5.58 5.82 9.38 11.4 11.4.84.31 1.74-.07 2.12-.87l1.08-2.4a1.5 1.5 0 0 0-.57-1.84l-2.17-1.43a1.5 1.5 0 0 0-1.83.12l-1.04.88a11.45 11.45 0 0 1-2.64-2.64l.88-1.04a1.5 1.5 0 0 0 .12-1.83L9.14 4.07a1.5 1.5 0 0 0-1.84-.57Z" /></svg>
+  if (name === 'settings') return <svg {...common}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.13 2.13-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.55v.09h-3v-.09A1.7 1.7 0 0 0 10.67 18.7a1.7 1.7 0 0 0-1.88.34l-.06.06-2.13-2.13.06-.06A1.7 1.7 0 0 0 7 15.03a1.7 1.7 0 0 0-1.55-1.03h-.09v-3h.09A1.7 1.7 0 0 0 7 9.97a1.7 1.7 0 0 0-.34-1.88L6.6 8.03 8.73 5.9l.06.06a1.7 1.7 0 0 0 1.88.34 1.7 1.7 0 0 0 1.03-1.55v-.09h3v.09a1.7 1.7 0 0 0 1.03 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06 2.13 2.13-.06.06a1.7 1.7 0 0 0-.34 1.88 1.7 1.7 0 0 0 1.55 1.03h.09v3h-.09A1.7 1.7 0 0 0 19.4 15Z" /></svg>
+  if (name === 'copy') return <svg {...common}><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3" /></svg>
+  if (name === 'chevron') return <svg {...common}><path d="m7 10 5 5 5-5" /></svg>
+  if (name === 'clock') return <svg {...common}><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.25 2" /></svg>
+  if (name === 'sound') return <svg {...common}><path d="M4 10h3l4-3v10l-4-3H4zM15 9.5a4 4 0 0 1 0 5M18 7a7 7 0 0 1 0 10" /></svg>
+  return <svg {...common}><path d="M5 5h14v11H9l-4 3V5Z" /><path d="M8 9h8M8 12h5" /></svg>
+}
+
+const transcript = [
+  { speaker: 'you', time: '00:12', text: 'Oi, Rafaela! Que bom falar com você. Para começarmos, me conta: o que motivou vocês a olhar para o Orientador agora?' },
+  { speaker: 'client', time: '00:26', text: 'A gente está crescendo rápido e eu sinto que cada vendedor conduz as calls de um jeito. Fica difícil manter uma conversa consistente.' },
+  { speaker: 'you', time: '01:04', text: 'Entendo. E quando uma conversa foge do roteiro ou surge uma objeção mais difícil, como o time costuma reagir hoje?' },
+  { speaker: 'client', time: '01:22', text: 'Normalmente pedem ajuda no Slack ou deixam para falar com o gestor depois. Às vezes a oportunidade já esfriou.' },
+  { speaker: 'you', time: '02:18', text: 'Faz sentido. A ideia é apoiar a pessoa no momento da conversa, sem transformar a call em algo engessado.' },
+  { speaker: 'client', time: '02:47', text: 'Gostei da ideia, mas sinceramente achei o investimento um pouco acima do que tínhamos planejado para este trimestre.' },
+]
+
+const suggestions = [
+  {
+    label: 'Objeção de preço',
+    quote: '“Gostei da ideia, mas sinceramente achei o investimento um pouco acima do que tínhamos planejado para este trimestre.”',
+    answers: [
+      'Faz todo sentido olhar para o investimento com cuidado, Rafaela. Posso te fazer uma pergunta? Quanto custa hoje para vocês quando uma oportunidade esfria por falta de apoio no momento da call? A proposta do Orientador é justamente encurtar esse intervalo entre a dúvida e uma boa resposta.',
+      'Entendo, Rafaela. Antes de comparar apenas o valor, vale olharmos para o retorno: se o time conseguir recuperar uma oportunidade a mais por mês com mais consistência nas calls, como isso se compara ao investimento? Podemos começar com o grupo que mais precisa desse apoio.',
+    ],
+    points: ['Valide a preocupação antes de argumentar.', 'Retome a dor que ela trouxe: oportunidades que esfriam.', 'Convide para comparar impacto e não apenas preço.'],
+  },
+]
+
+const previousSuggestions = [
+  { label: 'Aprofundar a dor', time: '01:26', quote: '“Às vezes a oportunidade já esfriou.”', answer: 'Quando isso acontece, o que normalmente se perde primeiro: velocidade de resposta, confiança do vendedor ou o contexto da conversa? Isso ajuda a entender onde um apoio em tempo real faria mais diferença.' },
+  { label: 'Descoberta', time: '00:31', quote: '“Cada vendedor conduz as calls de um jeito.”', answer: 'O que vocês já tentaram para dar mais consistência ao time? Quero entender se o desafio é mais de processo, de treinamento ou de apoio durante a conversa.' },
+]
+
+function formatDuration(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0')
+  const seconds = (totalSeconds % 60).toString().padStart(2, '0')
+  return `${minutes}:${seconds}`
+}
+
 function HomePage() {
   const [account, setAccount] = useState<Account | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [isCallActive, setIsCallActive] = useState(true)
+  const [microphoneOn, setMicrophoneOn] = useState(true)
+  const [tabAudioOn, setTabAudioOn] = useState(true)
+  const [elapsedSeconds, setElapsedSeconds] = useState(1002)
+  const [suggestionVersion, setSuggestionVersion] = useState(0)
+  const [expandedSuggestion, setExpandedSuggestion] = useState<number | null>(null)
+  const [copied, setCopied] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   useEffect(() => {
     api.me().then(setAccount).catch(cause => {
       if (cause instanceof ApiError && cause.code === 'TRIAL_EXPIRED') {
@@ -177,6 +233,12 @@ function HomePage() {
     })
   }, [])
 
+  useEffect(() => {
+    if (!isCallActive) return
+    const interval = window.setInterval(() => setElapsedSeconds(seconds => seconds + 1), 1000)
+    return () => window.clearInterval(interval)
+  }, [isCallActive])
+
   async function logout() {
     try {
       await api.logout()
@@ -187,20 +249,58 @@ function HomePage() {
   }
 
   if (!account) return <div className="loading-page" role="status">{error ?? 'Carregando seu espaço…'}</div>
-  const daysLeft = Math.max(0, Math.ceil((new Date(account.trialEndsAt).getTime() - Date.now()) / 86_400_000))
-  return <div className="home-page">
-    <header className="home-header"><Brand /><button type="button" onClick={logout} className="text-button">Sair da conta <span aria-hidden="true">↗</span></button></header>
-    <main className="home-main">
-      <span className="eyebrow">SEU ESPAÇO NO ORIENTADOR</span>
-      <h1>Olá, {account.name.split(' ')[0]}<span className="heading-dot">.</span></h1>
-      <p className="home-lead">Sua conta está pronta. Este é o começo de conversas mais claras.</p>
-      <div className="home-grid">
-        <section className="home-card trial-card"><div className="card-icon" aria-hidden="true">↗</div><span className="card-label">PERÍODO GRATUITO</span><strong>{daysLeft} {daysLeft === 1 ? 'dia restante' : 'dias restantes'}</strong><p>Seu acesso termina em {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long', timeStyle: 'short', timeZone: 'America/Sao_Paulo' }).format(new Date(account.trialEndsAt))}. Depois disso, o login será bloqueado. Não haverá cobrança automática.</p></section>
-        <section className="home-card"><div className="card-icon" aria-hidden="true">◉</div><span className="card-label">SUA CONTA</span><strong>{account.accountType === 'ORGANIZATION' ? account.organizationName : 'Uso individual'}</strong><p>{account.accountType === 'ORGANIZATION' ? 'Você é o gestor inicial desta organização.' : 'Um espaço criado só para você.'}</p><small>{account.email}</small></section>
+  const currentSuggestion = suggestions[0]
+  const currentAnswer = currentSuggestion.answers[suggestionVersion]
+  const callStatus = isCallActive ? 'Call em andamento' : 'Call encerrada'
+
+  return <div className="call-page">
+    <header className="call-topbar">
+      <a className="call-brand" href={routes.home} aria-label="Orientador — tela da call"><img src={logoUrl} alt="Orientador" /></a>
+      <div className="call-context">
+        <span className={`live-status ${isCallActive ? 'is-live' : 'is-ended'}`}><span />{callStatus}</span>
+        <span className="call-timer"><Icon name="clock" size={16} />{formatDuration(elapsedSeconds)}</span>
+        <span className="context-divider" aria-hidden="true" />
+        <div className="client-identity"><span className="client-avatar">RC</span><span><strong>Rafaela Costa</strong><small>Diretora comercial · Orbit</small></span></div>
       </div>
-      <div className="coming-next"><span className="pulse-dot" /><div><strong>O acompanhamento de reuniões vem em breve.</strong><p>Por enquanto, você já pode acessar sua conta e consultar os <a href={routes.terms}>Termos de Uso</a>.</p></div></div>
-      <ErrorNotice message={error} />
+      <div className="call-actions">
+        <button type="button" className={`icon-control ${microphoneOn ? 'is-on' : ''}`} aria-label={microphoneOn ? 'Desativar microfone simulado' : 'Ativar microfone simulado'} aria-pressed={microphoneOn} onClick={() => setMicrophoneOn(value => !value)}><Icon name="microphone" /></button>
+        <button type="button" className={`icon-control ${tabAudioOn ? 'is-on' : ''}`} aria-label={tabAudioOn ? 'Desativar áudio da aba simulado' : 'Ativar áudio da aba simulado'} aria-pressed={tabAudioOn} onClick={() => setTabAudioOn(value => !value)}><Icon name="tabAudio" /></button>
+        <button type="button" className="suggest-button" disabled={!isCallActive} onClick={() => setSuggestionVersion(value => (value + 1) % currentSuggestion.answers.length)}><Icon name="sparkles" />Sugerir agora</button>
+        <button type="button" className={`end-button ${isCallActive ? '' : 'restart-button'}`} onClick={() => setIsCallActive(value => !value)}><Icon name="phone" />{isCallActive ? 'Encerrar call' : 'Iniciar call'}</button>
+        <div className="settings-wrap"><button type="button" className="icon-control" aria-label="Abrir configurações da demonstração" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(value => !value)}><Icon name="settings" /></button>{settingsOpen && <div className="settings-popover"><strong>Modo demonstração</strong><span>Controles e conteúdo são simulados localmente.</span><button type="button" className="logout-button" onClick={logout}>Sair da conta <span aria-hidden="true">↗</span></button></div>}</div>
+      </div>
+    </header>
+
+    <main className="call-workspace">
+      <section className="workspace-panel transcript-panel" aria-labelledby="transcript-title">
+        <header className="panel-header"><div><span className="panel-kicker"><Icon name="transcript" size={17} />Transcrição ao vivo</span><h1 id="transcript-title">A conversa, no ritmo da call.</h1></div><span className="demo-label">Demonstração</span></header>
+        <div className="transcript-scroll">
+          <p className="call-start">Hoje · 09:30 <span>•</span> Transcrição simulada</p>
+          {transcript.map((message, index) => <article className={`message-row ${message.speaker === 'you' ? 'from-you' : 'from-client'}`} key={`${message.time}-${index}`}>
+            {message.speaker === 'client' && <span className="message-avatar" aria-hidden="true">RC</span>}
+            <div className="message-content"><div className="message-meta"><strong>{message.speaker === 'you' ? 'Você' : 'Rafaela'}</strong><time>{message.time}</time></div><p>{message.text}</p></div>
+            {message.speaker === 'you' && <span className="message-avatar you-avatar" aria-hidden="true">VO</span>}
+          </article>)}
+          {isCallActive && <div className="typing-line"><span /><span /><span /> Escutando a conversa…</div>}
+        </div>
+        <footer className="panel-footer"><span><Icon name="sound" size={16} />{tabAudioOn ? 'Áudio da aba simulado' : 'Áudio da aba pausado'}</span><span>Português (Brasil)</span></footer>
+      </section>
+
+      <section className="workspace-panel guidance-panel" aria-labelledby="guidance-title">
+        <header className="panel-header"><div><span className="panel-kicker ai-kicker"><Icon name="sparkles" size={17} />Orientação da IA</span><h2 id="guidance-title">Próxima melhor resposta</h2></div><span className="last-speech">Com base na última fala</span></header>
+        <div className="guidance-scroll">
+          <article className="suggestion-card">
+            <div className="client-quote"><span aria-hidden="true">“</span><div><small>RAFAELA DISSE · 02:47</small><p>{currentSuggestion.quote.replaceAll('“', '').replaceAll('”', '')}</p></div></div>
+            <div className="suggestion-topline"><span className="suggestion-tag">{currentSuggestion.label}</span><span className="confidence"><i /><b>94%</b> de aderência</span></div>
+            <p className="suggested-response">{currentAnswer}</p>
+            <div className="key-points"><h3>O que vale manter na resposta</h3><ul>{currentSuggestion.points.map(point => <li key={point}>{point}</li>)}</ul></div>
+            <footer className="suggestion-actions"><button type="button" className="subtle-button" onClick={() => setCopied(true)}><Icon name="copy" size={16} />{copied ? 'Copiado na demonstração' : 'Copiar resposta'}</button><button type="button" className="subtle-button" onClick={() => setSuggestionVersion(value => (value + 1) % currentSuggestion.answers.length)}><Icon name="sparkles" size={16} />Gerar outra</button><small>Gerada agora</small></footer>
+          </article>
+          <section className="previous-suggestions" aria-labelledby="previous-title"><div className="previous-heading"><h3 id="previous-title">Sugestões anteriores</h3><span>{previousSuggestions.length}</span></div>{previousSuggestions.map((suggestion, index) => { const expanded = expandedSuggestion === index; return <article className={`previous-card ${expanded ? 'is-expanded' : ''}`} key={suggestion.time}><button type="button" className="previous-trigger" aria-expanded={expanded} onClick={() => setExpandedSuggestion(expanded ? null : index)}><span><b>{suggestion.label}</b><small>{suggestion.time}</small></span><Icon name="chevron" size={18} /></button>{expanded && <div className="previous-content"><q>{suggestion.quote}</q><p>{suggestion.answer}</p></div>}</article> })}</section>
+        </div>
+      </section>
     </main>
+    <div className="call-bottom-note">Simulação visual — nenhum áudio é capturado, enviado ou armazenado nesta etapa.</div>
   </div>
 }
 

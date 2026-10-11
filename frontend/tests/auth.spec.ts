@@ -19,9 +19,9 @@ test('cadastro individual, termos, login e saída', async ({ page }) => {
   await page.getByLabel('E-mail').fill(email)
   await page.getByLabel('Senha').fill(password)
   await page.getByRole('button', { name: /Entrar na minha conta/ }).click()
-  await expect(page.getByRole('heading', { name: 'Olá, Pessoa.' })).toBeVisible()
-  await expect(page.getByText(email)).toBeVisible()
-  await expect(page.getByText(/7 dias restantes/)).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'A conversa, no ritmo da call.' })).toBeVisible()
+  await expect(page.getByText('Rafaela Costa')).toBeVisible()
+  await page.getByRole('button', { name: 'Abrir configurações da demonstração' }).click()
   await page.getByRole('button', { name: /Sair da conta/ }).click()
   await expect(page).toHaveURL(/\/app\/login$/)
 })
@@ -41,8 +41,8 @@ test('cadastro organizacional cria o primeiro gestor', async ({ page }) => {
   await page.getByLabel('E-mail').fill(email)
   await page.getByLabel('Senha').fill(password)
   await page.getByRole('button', { name: /Entrar na minha conta/ }).click()
-  await expect(page.getByText('Equipe Aurora')).toBeVisible()
-  await expect(page.getByText('Você é o gestor inicial desta organização.')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Próxima melhor resposta' })).toBeVisible()
+  await expect(page.getByText('Simulação visual — nenhum áudio é capturado, enviado ou armazenado nesta etapa.')).toBeVisible()
 })
 
 test('cadastro móvel não envia sem aceite e não tem rolagem horizontal', async ({ page }) => {
@@ -56,4 +56,28 @@ test('cadastro móvel não envia sem aceite e não tem rolagem horizontal', asyn
   await expect(page.getByRole('alert')).toContainText('aceite os Termos')
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await expect(page.getByRole('link', { name: 'Termos de Uso' }).first()).toBeVisible()
+})
+
+test('tela da call mockada alterna controles e adapta o layout sem depender da API real', async ({ page }, testInfo) => {
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'visual-test', name: 'Pessoa Teste', email: 'pessoa@example.com', role: 'INDIVIDUAL',
+      accountType: 'INDIVIDUAL', organizationName: null, trialEndsAt: '2026-10-18T12:00:00Z',
+    }),
+  }))
+  await page.goto('/app/')
+  await expect(page.getByRole('heading', { name: 'A conversa, no ritmo da call.' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Próxima melhor resposta' })).toBeVisible()
+  await page.getByRole('button', { name: 'Desativar microfone simulado' }).click()
+  await expect(page.getByRole('button', { name: 'Ativar microfone simulado' })).toHaveAttribute('aria-pressed', 'false')
+  await page.getByRole('button', { name: 'Gerar outra' }).click()
+  await expect(page.getByText(/Antes de comparar apenas o valor/)).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('tela-call-desktop.png'), fullPage: true })
+
+  await page.setViewportSize({ width: 375, height: 812 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await expect(page.getByText('Sugestões anteriores')).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('tela-call-mobile.png'), fullPage: true })
 })

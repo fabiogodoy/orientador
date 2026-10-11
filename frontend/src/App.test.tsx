@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { App } from './App'
 
 beforeEach(() => {
@@ -56,4 +56,47 @@ it('exibe login e contato para senha esquecida', () => {
   render(<App />)
   expect(screen.getByRole('heading', { name: 'Entre no seu espaço' })).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'contato@connectas.com.br' })).toHaveAttribute('href', 'mailto:contato@connectas.com.br')
+})
+
+describe('tela principal de call', () => {
+  const account = {
+    id: 'user-1', name: 'Vanessa Oliveira', email: 'vanessa@example.com', role: 'INDIVIDUAL' as const,
+    accountType: 'INDIVIDUAL' as const, organizationName: null, trialEndsAt: '2026-10-18T12:00:00Z',
+  }
+
+  beforeEach(() => {
+    window.history.replaceState({}, '', '/app/')
+  })
+
+  it('exibe a conversa, orientação e controles simulados sem iniciar integração de mídia', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(account), { status: 200 }))
+    vi.stubGlobal('fetch', fetch)
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'A conversa, no ritmo da call.' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Próxima melhor resposta' })).toBeInTheDocument()
+    expect(screen.getAllByText('Rafaela').length).toBeGreaterThan(0)
+    expect(screen.getByText('Simulação visual — nenhum áudio é capturado, enviado ou armazenado nesta etapa.')).toBeInTheDocument()
+
+    const microphone = screen.getByRole('button', { name: 'Desativar microfone simulado' })
+    expect(microphone).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(microphone)
+    expect(screen.getByRole('button', { name: 'Ativar microfone simulado' })).toHaveAttribute('aria-pressed', 'false')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Encerrar call' }))
+    expect(screen.getByRole('button', { name: 'Iniciar call' })).toBeInTheDocument()
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('troca a sugestão e expande uma orientação anterior localmente', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(account), { status: 200 })))
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Próxima melhor resposta' })
+    fireEvent.click(screen.getByRole('button', { name: 'Gerar outra' }))
+    expect(screen.getByText(/Antes de comparar apenas o valor/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /Aprofundar a dor/ }))
+    await waitFor(() => expect(screen.getByText(/Quando isso acontece, o que normalmente se perde primeiro/)).toBeInTheDocument())
+  })
 })
