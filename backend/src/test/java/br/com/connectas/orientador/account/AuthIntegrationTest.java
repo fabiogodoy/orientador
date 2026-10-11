@@ -172,12 +172,14 @@ class AuthIntegrationTest {
         UUID callId = UUID.randomUUID();
         jdbc.update("INSERT INTO call_sessions (id, tenant_id, user_id, status, started_at) VALUES (?, ?, ?, 'ACTIVE', ?)", callId, tenantId, ownerId, Timestamp.from(START));
 
-        HttpResponse<String> persisted = post("/api/calls/" + callId + "/segments", "{\"sequenceNumber\":1,\"text\":\" Trecho final da conversa. \"}");
+        assertEquals(400, post("/api/calls/" + callId + "/segments", "{\"sequenceNumber\":1,\"text\":\"Fala inválida.\",\"speaker\":\"BOT\"}").statusCode());
+        HttpResponse<String> persisted = post("/api/calls/" + callId + "/segments", "{\"sequenceNumber\":1,\"text\":\" Trecho final da conversa. \",\"speaker\":\"CLIENT\"}");
         assertEquals(204, persisted.statusCode(), persisted.body());
         assertEquals("Trecho final da conversa.", jdbc.queryForObject("SELECT text FROM transcript_segments WHERE call_session_id=?", String.class, callId));
+        assertEquals("CLIENT", jdbc.queryForObject("SELECT speaker FROM transcript_segments WHERE call_session_id=?", String.class, callId));
         assertEquals(204, post("/api/calls/" + callId + "/end", "{}").statusCode());
         assertEquals("ENDED", jdbc.queryForObject("SELECT status FROM call_sessions WHERE id=?", String.class, callId));
-        assertEquals(404, post("/api/calls/" + callId + "/segments", "{\"sequenceNumber\":2,\"text\":\"Não deve entrar.\"}").statusCode());
+        assertEquals(404, post("/api/calls/" + callId + "/segments", "{\"sequenceNumber\":2,\"text\":\"Não deve entrar.\",\"speaker\":\"USER\"}").statusCode());
         assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM transcript_segments WHERE call_session_id=?", Integer.class, callId));
     }
 

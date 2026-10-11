@@ -59,3 +59,7 @@ _Evitar_: transcrição salva
 **Segredo efêmero:**
 Credencial de curta duração e escopo de uma sessão, emitida pelo backend para o navegador conectar ao provedor de transcrição sem receber a chave permanente.
 _Evitar_: chave OpenAI
+
+**Fonte de captura:**
+Origem independente de áudio dentro de uma sessão de call: microfone do usuário ou áudio compartilhado de aba/janela.
+_Evitar_: call como sinônimo de uma única fonte

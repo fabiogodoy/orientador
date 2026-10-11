@@ -9,6 +9,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe('cadastro', () => {
@@ -76,14 +77,27 @@ describe('tela principal de call', () => {
     expect(await screen.findByRole('heading', { name: 'A conversa, no ritmo da call.' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Próxima melhor resposta' })).toBeInTheDocument()
     expect(screen.getAllByText('Rafaela').length).toBeGreaterThan(0)
-    expect(screen.getByText(/Ao iniciar, seu microfone é enviado à OpenAI para transcrição em tempo real/)).toBeInTheDocument()
+    expect(screen.getByText(/Microfone e áudio compartilhado são transcritos de forma independente/)).toBeInTheDocument()
 
-    const microphone = screen.getByRole('button', { name: 'Desativar microfone' })
-    expect(microphone).toHaveAttribute('aria-pressed', 'true')
-    fireEvent.click(microphone)
-    expect(screen.getByRole('button', { name: 'Ativar microfone' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Escutar microfone' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Escutar áudio da aba' })).toHaveAttribute('aria-pressed', 'false')
 
     expect(screen.getByRole('button', { name: 'Iniciar call' })).toBeInTheDocument()
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('avisa imediatamente quando a seleção não fornece áudio da aba', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(account), { status: 200 }))
+    const stop = vi.fn()
+    Object.defineProperty(window.navigator, 'mediaDevices', { configurable: true, writable: true, value: { getDisplayMedia: vi.fn().mockResolvedValue({ getTracks: () => [{ stop }], getAudioTracks: () => [] }) } })
+    Object.defineProperty(window, 'RTCPeerConnection', { configurable: true, writable: true, value: class {} })
+    vi.stubGlobal('fetch', fetch)
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'A conversa, no ritmo da call.' })
+    fireEvent.click(screen.getByRole('button', { name: 'Escutar áudio da aba' }))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Nenhum áudio foi compartilhado'))
+    expect(stop).toHaveBeenCalled()
     expect(fetch).toHaveBeenCalledTimes(1)
   })
 

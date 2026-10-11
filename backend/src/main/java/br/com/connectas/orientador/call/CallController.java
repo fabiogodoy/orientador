@@ -13,6 +13,8 @@ class CallController {
     private final CallService calls;
     CallController(CallService calls) { this.calls = calls; }
     @PostMapping public CallSessionResponse start(Authentication auth) { return calls.start(((SessionPrincipal) auth.getPrincipal()).userId()); }
+    @PostMapping("/{sessionId}/transcription-secret")
+    TranscriptionSecretResponse transcriptionSecret(Authentication auth, @PathVariable UUID sessionId) { return calls.createTranscriptionSecret(((SessionPrincipal) auth.getPrincipal()).userId(), sessionId); }
     @PostMapping("/{sessionId}/segments") @ResponseStatus(HttpStatus.NO_CONTENT)
     void segment(Authentication auth, @PathVariable UUID sessionId, @Valid @RequestBody TranscriptSegmentRequest request) { calls.append(((SessionPrincipal) auth.getPrincipal()).userId(), sessionId, request); }
     @PostMapping("/{sessionId}/end") @ResponseStatus(HttpStatus.NO_CONTENT)

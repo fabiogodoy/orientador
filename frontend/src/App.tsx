@@ -210,23 +210,32 @@ function formatDuration(totalSeconds: number) {
   return `${minutes}:${seconds}`
 }
 
+type AudioSource = 'microphone' | 'tab'
+type TranscriptSpeaker = 'you' | 'client'
+type SourceCapture = { stream: MediaStream; connection: RTCPeerConnection }
+type DisplayAudioOptions = DisplayMediaStreamOptions & { preferCurrentTab?: boolean; selfBrowserSurface?: 'exclude'; systemAudio?: 'include'; windowAudio?: 'system' }
+
+const speakerForSource: Record<AudioSource, TranscriptSpeaker> = { microphone: 'you', tab: 'client' }
+const apiSpeakerForSource = (source: AudioSource) => source === 'microphone' ? 'USER' : 'CLIENT'
+
 function HomePage() {
   const [account, setAccount] = useState<Account | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isCallActive, setIsCallActive] = useState(false)
-  const [microphoneOn, setMicrophoneOn] = useState(true)
-  const [tabAudioOn, setTabAudioOn] = useState(true)
+  const [microphoneOn, setMicrophoneOn] = useState(false)
+  const [tabAudioOn, setTabAudioOn] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(1002)
   const [suggestionVersion, setSuggestionVersion] = useState(0)
   const [expandedSuggestion, setExpandedSuggestion] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [liveMessages, setLiveMessages] = useState<{ speaker: 'you'; time: string; text: string }[]>([])
-  const [partialTranscript, setPartialTranscript] = useState('')
-  const peerConnection = useRef<RTCPeerConnection | null>(null)
-  const microphoneStream = useRef<MediaStream | null>(null)
+  const [liveMessages, setLiveMessages] = useState<{ speaker: TranscriptSpeaker; time: string; text: string }[]>([])
+  const [partialTranscripts, setPartialTranscripts] = useState<Record<AudioSource, string>>({ microphone: '', tab: '' })
+  const sourceCaptures = useRef<Record<AudioSource, SourceCapture | null>>({ microphone: null, tab: null })
   const callSessionId = useRef<string | null>(null)
+  const sessionStart = useRef<Promise<{ sessionId: string; clientSecret: string }> | null>(null)
   const nextSegment = useRef(1)
+  const elapsedSecondsRef = useRef(elapsedSeconds)
   useEffect(() => {
     api.me().then(setAccount).catch(cause => {
       if (cause instanceof ApiError && cause.code === 'TRIAL_EXPIRED') {
@@ -245,6 +254,8 @@ function HomePage() {
     return () => window.clearInterval(interval)
   }, [isCallActive])
 
+  useEffect(() => { elapsedSecondsRef.current = elapsedSeconds }, [elapsedSeconds])
+
   async function logout() {
     try {
       await api.logout()
@@ -254,66 +265,156 @@ function HomePage() {
     }
   }
 
-  function stopLocalMedia() {
-    microphoneStream.current?.getTracks().forEach(track => track.stop())
-    microphoneStream.current = null
-    peerConnection.current?.close()
-    peerConnection.current = null
-    setPartialTranscript('')
+  function setSourceListening(source: AudioSource, listening: boolean) {
+    if (source === 'microphone') setMicrophoneOn(listening)
+    else setTabAudioOn(listening)
   }
 
-  function toggleMicrophone() {
-    setMicrophoneOn(current => {
-      const next = !current
-      microphoneStream.current?.getAudioTracks().forEach(track => { track.enabled = next })
-      return next
-    })
+  function releaseSource(source: AudioSource) {
+    const capture = sourceCaptures.current[source]
+    if (!capture) return false
+    sourceCaptures.current[source] = null
+    capture.connection.close()
+    capture.stream.getTracks().forEach(track => track.stop())
+    setSourceListening(source, false)
+    setPartialTranscripts(current => ({ ...current, [source]: '' }))
+    return true
+  }
+
+  function hasActiveSources() {
+    return sourceCaptures.current.microphone !== null || sourceCaptures.current.tab !== null
+  }
+
+  async function endSessionIfUnused() {
+    if (hasActiveSources()) return
+    const sessionId = callSessionId.current
+    callSessionId.current = null
+    setIsCallActive(false)
+    if (sessionId) await api.endCall(sessionId).catch(() => setError('A captura foi encerrada localmente, mas não foi possível finalizar o histórico agora.'))
+  }
+
+  async function stopSource(source: AudioSource, message?: string) {
+    if (!releaseSource(source)) return
+    if (message) setError(message)
+    await endSessionIfUnused()
+  }
+
+  async function endCall() {
+    releaseSource('microphone')
+    releaseSource('tab')
+    await endSessionIfUnused()
+  }
+
+  async function ensureSession() {
+    if (callSessionId.current) return { sessionId: callSessionId.current, clientSecret: (await api.createTranscriptionSecret(callSessionId.current)).clientSecret }
+    if (!sessionStart.current) sessionStart.current = api.startCall()
+    try {
+      const session = await sessionStart.current
+      callSessionId.current = session.sessionId
+      setElapsedSeconds(0)
+      return session
+    } finally {
+      sessionStart.current = null
+    }
+  }
+
+  function receiveTranscript(source: AudioSource, sessionId: string, payload: unknown) {
+    if (typeof payload !== 'string') return
+    try {
+      const message = JSON.parse(payload) as { type?: string; delta?: string; transcript?: string }
+      if (message.type === 'conversation.item.input_audio_transcription.delta') {
+        setPartialTranscripts(current => ({ ...current, [source]: current[source] + (message.delta ?? '') }))
+      }
+      if (message.type === 'conversation.item.input_audio_transcription.completed' && message.transcript?.trim()) {
+        const text = message.transcript.trim()
+        const sequenceNumber = nextSegment.current++
+        const speaker = speakerForSource[source]
+        setLiveMessages(current => [...current, { speaker, time: formatDuration(elapsedSecondsRef.current), text }])
+        setPartialTranscripts(current => ({ ...current, [source]: '' }))
+        void api.saveTranscriptSegment(sessionId, sequenceNumber, text, apiSpeakerForSource(source)).catch(() => setError('A fala foi transcrita, mas não pôde ser salva no histórico.'))
+      }
+    } catch {
+      setError('A transcrição recebeu um evento inválido. Tente iniciar a fonte novamente.')
+    }
+  }
+
+  async function connectSource(source: AudioSource, stream: MediaStream, session: { sessionId: string; clientSecret: string }) {
+    const connection = new RTCPeerConnection()
+    sourceCaptures.current[source] = { stream, connection }
+    stream.getAudioTracks().forEach(track => connection.addTrack(track, stream))
+    const channel = connection.createDataChannel(`oai-${source}-events`)
+    channel.onmessage = event => receiveTranscript(source, session.sessionId, event.data)
+    stream.getTracks().forEach(track => track.addEventListener('ended', () => {
+      if (sourceCaptures.current[source]?.stream === stream) {
+        void stopSource(source, source === 'tab' ? 'O compartilhamento de áudio da aba foi interrompido.' : 'O microfone foi interrompido.')
+      }
+    }))
+    const offer = await connection.createOffer()
+    await connection.setLocalDescription(offer)
+    const response = await fetch('https://api.openai.com/v1/realtime/calls', { method: 'POST', headers: { Authorization: `Bearer ${session.clientSecret}`, 'Content-Type': 'application/sdp' }, body: offer.sdp })
+    if (!response.ok) throw new Error('Falha ao iniciar a transcrição em tempo real.')
+    await connection.setRemoteDescription({ type: 'answer', sdp: await response.text() })
+    setSourceListening(source, true)
+    setIsCallActive(true)
+  }
+
+  async function startMicrophone() {
+    if (!window.navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) { setError('Este navegador não suporta a captura de microfone em tempo real.'); return }
+    try {
+      setError(null)
+      const stream = await window.navigator.mediaDevices.getUserMedia({ audio: true })
+      const session = await ensureSession()
+      await connectSource('microphone', stream, session)
+    } catch (cause) {
+      releaseSource('microphone')
+      await endSessionIfUnused()
+      setError(cause instanceof DOMException && cause.name === 'NotAllowedError' ? 'Permita o microfone para iniciar a transcrição.' : 'Não foi possível iniciar a transcrição do microfone agora. Tente novamente.')
+    }
+  }
+
+  async function startTabAudio() {
+    if (!window.navigator.mediaDevices?.getDisplayMedia || !window.RTCPeerConnection) { setError('Este navegador não suporta compartilhar áudio de uma aba ou janela.'); return }
+    try {
+      setError(null)
+      const displayOptions: DisplayAudioOptions = { audio: true, video: true, preferCurrentTab: false, selfBrowserSurface: 'exclude', systemAudio: 'include', windowAudio: 'system' }
+      const stream = await window.navigator.mediaDevices.getDisplayMedia(displayOptions)
+      if (!stream.getAudioTracks().length) {
+        stream.getTracks().forEach(track => track.stop())
+        setError('Nenhum áudio foi compartilhado. Escolha a aba ou janela da reunião e ative “Compartilhar áudio”.')
+        return
+      }
+      const session = await ensureSession()
+      await connectSource('tab', stream, session)
+    } catch (cause) {
+      releaseSource('tab')
+      await endSessionIfUnused()
+      setError(cause instanceof DOMException && cause.name === 'NotAllowedError' ? 'A escolha da aba foi cancelada ou não foi permitida.' : 'Não foi possível iniciar o áudio da aba agora. Tente novamente.')
+    }
+  }
+
+  async function toggleMicrophone() {
+    if (sourceCaptures.current.microphone) await stopSource('microphone')
+    else await startMicrophone()
+  }
+
+  async function toggleTabAudio() {
+    if (sourceCaptures.current.tab) await stopSource('tab')
+    else await startTabAudio()
   }
 
   async function toggleCall() {
-    if (isCallActive) {
-      const sessionId = callSessionId.current
-      stopLocalMedia(); setIsCallActive(false); callSessionId.current = null
-      if (sessionId) await api.endCall(sessionId).catch(() => setError('A captura foi encerrada localmente, mas não foi possível finalizar o histórico agora.'))
-      return
-    }
-    if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) { setError('Este navegador não suporta a captura de microfone em tempo real.'); return }
-    try {
-      setError(null)
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      stream.getAudioTracks().forEach(track => { track.enabled = microphoneOn })
-      microphoneStream.current = stream
-      const session = await api.startCall(); callSessionId.current = session.sessionId
-      const connection = new RTCPeerConnection(); peerConnection.current = connection
-      stream.getAudioTracks().forEach(track => connection.addTrack(track, stream))
-      const channel = connection.createDataChannel('oai-events')
-      channel.onmessage = event => {
-        const message = JSON.parse(event.data) as { type?: string; delta?: string; transcript?: string }
-        if (message.type === 'conversation.item.input_audio_transcription.delta') setPartialTranscript(current => current + (message.delta ?? ''))
-        if (message.type === 'conversation.item.input_audio_transcription.completed' && message.transcript?.trim()) {
-          const text = message.transcript.trim(); const sequenceNumber = nextSegment.current++
-          setLiveMessages(current => [...current, { speaker: 'you', time: formatDuration(elapsedSeconds), text }]); setPartialTranscript('')
-          void api.saveTranscriptSegment(session.sessionId, sequenceNumber, text).catch(() => setError('A fala foi transcrita, mas não pôde ser salva no histórico.'))
-        }
-      }
-      const offer = await connection.createOffer(); await connection.setLocalDescription(offer)
-      const response = await fetch('https://api.openai.com/v1/realtime/calls', { method: 'POST', headers: { Authorization: `Bearer ${session.clientSecret}`, 'Content-Type': 'application/sdp' }, body: offer.sdp })
-      if (!response.ok) throw new Error('Falha ao iniciar a transcrição em tempo real.')
-      await connection.setRemoteDescription({ type: 'answer', sdp: await response.text() })
-      setElapsedSeconds(0); setIsCallActive(true)
-    } catch (cause) {
-      stopLocalMedia(); callSessionId.current = null
-      setError(cause instanceof DOMException && cause.name === 'NotAllowedError' ? 'Permita o microfone para iniciar a transcrição.' : 'Não foi possível iniciar a transcrição agora. Tente novamente.')
-    }
+    if (isCallActive) await endCall()
+    else await startMicrophone()
   }
 
   if (!account) return <div className="loading-page" role="status">{error ?? 'Carregando seu espaço…'}</div>
   const currentSuggestion = suggestions[0]
   const currentAnswer = currentSuggestion.answers[suggestionVersion]
-  const callStatus = isCallActive ? 'Microfone sendo transcrito' : 'Call encerrada'
+  const callStatus = !isCallActive ? 'Call encerrada' : microphoneOn && tabAudioOn ? 'Você e cliente sendo transcritos' : microphoneOn ? 'Microfone sendo transcrito' : 'Áudio da aba sendo transcrito'
   const displayedTranscript = liveMessages.length ? liveMessages : transcript
 
   return <div className="call-page">
+    <ErrorNotice message={error} />
     <header className="call-topbar">
       <a className="call-brand" href={routes.home} aria-label="Orientador — tela da call"><img src={logoUrl} alt="Orientador" /></a>
       <div className="call-context">
@@ -323,8 +424,8 @@ function HomePage() {
         <div className="client-identity"><span className="client-avatar">RC</span><span><strong>Rafaela Costa</strong><small>Diretora comercial · Orbit</small></span></div>
       </div>
       <div className="call-actions">
-        <button type="button" className={`icon-control ${microphoneOn ? 'is-on' : ''}`} aria-label={microphoneOn ? 'Desativar microfone' : 'Ativar microfone'} aria-pressed={microphoneOn} onClick={toggleMicrophone}><Icon name="microphone" /></button>
-        <button type="button" className={`icon-control ${tabAudioOn ? 'is-on' : ''}`} aria-label={tabAudioOn ? 'Desativar áudio da aba simulado' : 'Ativar áudio da aba simulado'} aria-pressed={tabAudioOn} onClick={() => setTabAudioOn(value => !value)}><Icon name="tabAudio" /></button>
+        <button type="button" className={`icon-control ${microphoneOn ? 'is-on' : ''}`} aria-label={microphoneOn ? 'Parar de escutar microfone' : 'Escutar microfone'} aria-pressed={microphoneOn} onClick={() => void toggleMicrophone()}><Icon name="microphone" /></button>
+        <button type="button" className={`icon-control ${tabAudioOn ? 'is-on' : ''}`} aria-label={tabAudioOn ? 'Parar de escutar áudio da aba' : 'Escutar áudio da aba'} aria-pressed={tabAudioOn} onClick={() => void toggleTabAudio()}><Icon name="tabAudio" /></button>
         <button type="button" className="suggest-button" disabled={!isCallActive} onClick={() => setSuggestionVersion(value => (value + 1) % currentSuggestion.answers.length)}><Icon name="sparkles" />Sugerir agora</button>
         <button type="button" className={`end-button ${isCallActive ? '' : 'restart-button'}`} onClick={() => void toggleCall()}><Icon name="phone" />{isCallActive ? 'Encerrar call' : 'Iniciar call'}</button>
         <div className="settings-wrap"><button type="button" className="icon-control" aria-label="Abrir configurações da call" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(value => !value)}><Icon name="settings" /></button>{settingsOpen && <div className="settings-popover"><strong>Privacidade da call</strong><span>O áudio serve apenas à transcrição em tempo real; o Orientador mantém somente o texto final.</span><button type="button" className="logout-button" onClick={logout}>Sair da conta <span aria-hidden="true">↗</span></button></div>}</div>
@@ -341,10 +442,11 @@ function HomePage() {
             <div className="message-content"><div className="message-meta"><strong>{message.speaker === 'you' ? 'Você' : 'Rafaela'}</strong><time>{message.time}</time></div><p>{message.text}</p></div>
             {message.speaker === 'you' && <span className="message-avatar you-avatar" aria-hidden="true">VO</span>}
           </article>)}
-          {partialTranscript && <article className="message-row from-you"><div className="message-content"><div className="message-meta"><strong>Você</strong><time>agora</time></div><p>{partialTranscript}</p></div><span className="message-avatar you-avatar" aria-hidden="true">VO</span></article>}
-          {isCallActive && <div className="typing-line"><span /><span /><span /> Escutando e transcrevendo seu microfone…</div>}
+          {partialTranscripts.microphone && <article className="message-row from-you"><div className="message-content"><div className="message-meta"><strong>Você</strong><time>agora</time></div><p>{partialTranscripts.microphone}</p></div><span className="message-avatar you-avatar" aria-hidden="true">VO</span></article>}
+          {partialTranscripts.tab && <article className="message-row from-client"><span className="message-avatar" aria-hidden="true">RC</span><div className="message-content"><div className="message-meta"><strong>Cliente</strong><time>agora</time></div><p>{partialTranscripts.tab}</p></div></article>}
+          {isCallActive && <div className="typing-line"><span /><span /><span /> {microphoneOn && tabAudioOn ? 'Escutando você e o cliente…' : microphoneOn ? 'Escutando seu microfone…' : 'Escutando o áudio da aba…'}</div>}
         </div>
-        <footer className="panel-footer"><span><Icon name="sound" size={16} />{tabAudioOn ? 'Áudio da aba: em breve' : 'Áudio da aba desativado'}</span><span>Português (Brasil)</span></footer>
+        <footer className="panel-footer"><span><Icon name="sound" size={16} />{tabAudioOn ? 'Escutando áudio da aba' : 'Áudio da aba desativado'}</span><span>Português (Brasil)</span></footer>
       </section>
 
       <section className="workspace-panel guidance-panel" aria-labelledby="guidance-title">
@@ -361,7 +463,7 @@ function HomePage() {
         </div>
       </section>
     </main>
-    <div className="call-bottom-note">Ao iniciar, seu microfone é enviado à OpenAI para transcrição em tempo real. O Orientador salva somente o texto final.</div>
+    <div className="call-bottom-note">Microfone e áudio compartilhado são transcritos de forma independente. O Orientador salva somente o texto final.</div>
   </div>
 }
 

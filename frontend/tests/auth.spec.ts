@@ -42,7 +42,7 @@ test('cadastro organizacional cria o primeiro gestor', async ({ page }) => {
   await page.getByLabel('Senha').fill(password)
   await page.getByRole('button', { name: /Entrar na minha conta/ }).click()
   await expect(page.getByRole('heading', { name: 'Próxima melhor resposta' })).toBeVisible()
-  await expect(page.getByText(/Ao iniciar, seu microfone é enviado à OpenAI para transcrição em tempo real/)).toBeVisible()
+  await expect(page.getByText(/Microfone e áudio compartilhado são transcritos de forma independente/)).toBeVisible()
 })
 
 test('cadastro móvel não envia sem aceite e não tem rolagem horizontal', async ({ page }) => {
@@ -70,8 +70,8 @@ test('tela da call alterna controles e adapta o layout sem depender da API real'
   await page.goto('/app/')
   await expect(page.getByRole('heading', { name: 'A conversa, no ritmo da call.' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Próxima melhor resposta' })).toBeVisible()
-  await page.getByRole('button', { name: 'Desativar microfone' }).click()
-  await expect(page.getByRole('button', { name: 'Ativar microfone' })).toHaveAttribute('aria-pressed', 'false')
+  await expect(page.getByRole('button', { name: 'Escutar microfone' })).toHaveAttribute('aria-pressed', 'false')
+  await expect(page.getByRole('button', { name: 'Escutar áudio da aba' })).toHaveAttribute('aria-pressed', 'false')
   await page.getByRole('button', { name: 'Gerar outra' }).click()
   await expect(page.getByText(/Antes de comparar apenas o valor/)).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath('tela-call-desktop.png'), fullPage: true })

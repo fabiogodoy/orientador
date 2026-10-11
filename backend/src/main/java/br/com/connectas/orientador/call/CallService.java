@@ -31,12 +31,19 @@ public class CallService {
         return response;
     }
 
+    TranscriptionSecretResponse createTranscriptionSecret(UUID userId, UUID sessionId) {
+        Identity identity = accounts.currentIdentity(userId);
+        Integer active = jdbc.queryForObject("select count(*) from call_sessions where id=? and tenant_id=? and user_id=? and status='ACTIVE'", Integer.class, sessionId, identity.tenantId(), identity.id());
+        if (active == null || active != 1) throw new CallNotFoundException();
+        return new TranscriptionSecretResponse(realtime.createClientSecret(identity.id()));
+    }
+
     @Transactional
     void append(UUID userId, UUID sessionId, TranscriptSegmentRequest request) {
         Identity identity = accounts.currentIdentity(userId); Instant now = clock.instant();
-        int inserted = jdbc.update("insert into transcript_segments (id, call_session_id, tenant_id, sequence_number, text, finalized_at, created_at) select ?, id, tenant_id, ?, ?, ?, ? from call_sessions where id=? and tenant_id=? and user_id=? and status='ACTIVE'", UUID.randomUUID(), request.sequenceNumber(), request.text().trim(), Timestamp.from(now), Timestamp.from(now), sessionId, identity.tenantId(), identity.id());
+        int inserted = jdbc.update("insert into transcript_segments (id, call_session_id, tenant_id, sequence_number, text, speaker, finalized_at, created_at) select ?, id, tenant_id, ?, ?, ?, ?, ? from call_sessions where id=? and tenant_id=? and user_id=? and status='ACTIVE'", UUID.randomUUID(), request.sequenceNumber(), request.text().trim(), request.speaker().name(), Timestamp.from(now), Timestamp.from(now), sessionId, identity.tenantId(), identity.id());
         if (inserted != 1) throw new CallNotFoundException();
-        log.info("Realtime transcript segment persisted callId={} tenantId={} sequenceNumber={}", sessionId, identity.tenantId(), request.sequenceNumber());
+        log.info("Realtime transcript segment persisted callId={} tenantId={} sequenceNumber={} speaker={}", sessionId, identity.tenantId(), request.sequenceNumber(), request.speaker());
     }
 
     @Transactional
