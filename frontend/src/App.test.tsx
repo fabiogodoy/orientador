@@ -69,14 +69,15 @@ describe('tela principal de call', () => {
     window.history.replaceState({}, '', '/app/')
   })
 
-  it('exibe a conversa, orientação e controles de captura sem iniciar a mídia', async () => {
+  it('exibe a transcrição vazia, orientação e controles de captura sem iniciar a mídia', async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(account), { status: 200 }))
     vi.stubGlobal('fetch', fetch)
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: 'A conversa, no ritmo da call.' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Próxima melhor resposta' })).toBeInTheDocument()
-    expect(screen.getAllByText('Rafaela').length).toBeGreaterThan(0)
+    expect(screen.getByRole('status')).toHaveTextContent('As falas transcritas aparecerão aqui.')
+    expect(screen.queryByText('A gente está crescendo rápido e eu sinto que cada vendedor conduz as calls de um jeito.')).not.toBeInTheDocument()
     expect(screen.getByText(/Microfone e áudio compartilhado são transcritos de forma independente/)).toBeInTheDocument()
 
     expect(screen.getByRole('button', { name: 'Escutar microfone' })).toHaveAttribute('aria-pressed', 'false')
@@ -99,6 +100,25 @@ describe('tela principal de call', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Nenhum áudio foi compartilhado'))
     expect(stop).toHaveBeenCalled()
     expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('preserva a mensagem segura da API e encerra o stream quando a call não inicia', async () => {
+    const stop = vi.fn()
+    const stream = { getTracks: () => [{ stop }], getAudioTracks: () => [{ id: 'audio-1' }] }
+    Object.defineProperty(window.navigator, 'mediaDevices', { configurable: true, writable: true, value: { getUserMedia: vi.fn().mockResolvedValue(stream) } })
+    Object.defineProperty(window, 'RTCPeerConnection', { configurable: true, writable: true, value: class {} })
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(account), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ token: 'csrf-test' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ code: 'REALTIME_UNAVAILABLE', message: 'A transcrição em tempo real não está disponível agora.' }), { status: 503 }))
+    vi.stubGlobal('fetch', fetch)
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'A conversa, no ritmo da call.' })
+    fireEvent.click(screen.getByRole('button', { name: 'Escutar microfone' }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('A transcrição em tempo real não está disponível agora.'))
+    expect(stop).toHaveBeenCalled()
   })
 
   it('troca a sugestão e expande uma orientação anterior localmente', async () => {

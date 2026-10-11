@@ -164,6 +164,8 @@ class AuthIntegrationTest {
 
     @Test
     void finalizedTranscriptIsPersistedForTheAuthenticatedCallOnly() throws Exception {
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE version='02'", Integer.class));
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE version='03'", Integer.class));
         String ownerEmail = uniqueEmail();
         register(ownerEmail, "INDIVIDUAL", null, true, AccountService.TERMS_VERSION);
         assertEquals(200, post("/api/auth/login", loginJson(ownerEmail)).statusCode());

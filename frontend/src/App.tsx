@@ -178,15 +178,6 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   return <svg {...common}><path d="M5 5h14v11H9l-4 3V5Z" /><path d="M8 9h8M8 12h5" /></svg>
 }
 
-const transcript = [
-  { speaker: 'you', time: '00:12', text: 'Oi, Rafaela! Que bom falar com você. Para começarmos, me conta: o que motivou vocês a olhar para o Orientador agora?' },
-  { speaker: 'client', time: '00:26', text: 'A gente está crescendo rápido e eu sinto que cada vendedor conduz as calls de um jeito. Fica difícil manter uma conversa consistente.' },
-  { speaker: 'you', time: '01:04', text: 'Entendo. E quando uma conversa foge do roteiro ou surge uma objeção mais difícil, como o time costuma reagir hoje?' },
-  { speaker: 'client', time: '01:22', text: 'Normalmente pedem ajuda no Slack ou deixam para falar com o gestor depois. Às vezes a oportunidade já esfriou.' },
-  { speaker: 'you', time: '02:18', text: 'Faz sentido. A ideia é apoiar a pessoa no momento da conversa, sem transformar a call em algo engessado.' },
-  { speaker: 'client', time: '02:47', text: 'Gostei da ideia, mas sinceramente achei o investimento um pouco acima do que tínhamos planejado para este trimestre.' },
-]
-
 const suggestions = [
   {
     label: 'Objeção de preço',
@@ -214,6 +205,12 @@ type AudioSource = 'microphone' | 'tab'
 type TranscriptSpeaker = 'you' | 'client'
 type SourceCapture = { stream: MediaStream; connection: RTCPeerConnection }
 type DisplayAudioOptions = DisplayMediaStreamOptions & { preferCurrentTab?: boolean; selfBrowserSurface?: 'exclude'; systemAudio?: 'include'; windowAudio?: 'system' }
+
+class RealtimeConnectionError extends Error {
+  constructor(readonly status: number) {
+    super('Realtime connection failed')
+  }
+}
 
 const speakerForSource: Record<AudioSource, TranscriptSpeaker> = { microphone: 'you', tab: 'client' }
 const apiSpeakerForSource = (source: AudioSource) => source === 'microphone' ? 'USER' : 'CLIENT'
@@ -318,6 +315,19 @@ function HomePage() {
     }
   }
 
+  function captureErrorMessage(cause: unknown, source: AudioSource) {
+    if (cause instanceof ApiError) return cause.message
+    if (cause instanceof DOMException && cause.name === 'NotAllowedError') {
+      return source === 'microphone' ? 'Permita o microfone para iniciar a transcrição.' : 'A escolha da aba foi cancelada ou não foi permitida.'
+    }
+    if (cause instanceof RealtimeConnectionError) {
+      return cause.status === 401 || cause.status === 403
+        ? 'A sessão de transcrição expirou ou não foi autorizada. Tente iniciar novamente.'
+        : 'Não foi possível conectar à transcrição em tempo real. Confira sua conexão e tente novamente.'
+    }
+    return source === 'microphone' ? 'Não foi possível acessar o microfone agora. Tente novamente.' : 'Não foi possível iniciar o áudio da aba agora. Tente novamente.'
+  }
+
   function receiveTranscript(source: AudioSource, sessionId: string, payload: unknown) {
     if (typeof payload !== 'string') return
     try {
@@ -352,7 +362,7 @@ function HomePage() {
     const offer = await connection.createOffer()
     await connection.setLocalDescription(offer)
     const response = await fetch('https://api.openai.com/v1/realtime/calls', { method: 'POST', headers: { Authorization: `Bearer ${session.clientSecret}`, 'Content-Type': 'application/sdp' }, body: offer.sdp })
-    if (!response.ok) throw new Error('Falha ao iniciar a transcrição em tempo real.')
+    if (!response.ok) throw new RealtimeConnectionError(response.status)
     await connection.setRemoteDescription({ type: 'answer', sdp: await response.text() })
     setSourceListening(source, true)
     setIsCallActive(true)
@@ -360,24 +370,27 @@ function HomePage() {
 
   async function startMicrophone() {
     if (!window.navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) { setError('Este navegador não suporta a captura de microfone em tempo real.'); return }
+    let stream: MediaStream | null = null
     try {
       setError(null)
-      const stream = await window.navigator.mediaDevices.getUserMedia({ audio: true })
+      stream = await window.navigator.mediaDevices.getUserMedia({ audio: true })
       const session = await ensureSession()
       await connectSource('microphone', stream, session)
     } catch (cause) {
       releaseSource('microphone')
+      stream?.getTracks().forEach(track => track.stop())
       await endSessionIfUnused()
-      setError(cause instanceof DOMException && cause.name === 'NotAllowedError' ? 'Permita o microfone para iniciar a transcrição.' : 'Não foi possível iniciar a transcrição do microfone agora. Tente novamente.')
+      setError(captureErrorMessage(cause, 'microphone'))
     }
   }
 
   async function startTabAudio() {
     if (!window.navigator.mediaDevices?.getDisplayMedia || !window.RTCPeerConnection) { setError('Este navegador não suporta compartilhar áudio de uma aba ou janela.'); return }
+    let stream: MediaStream | null = null
     try {
       setError(null)
       const displayOptions: DisplayAudioOptions = { audio: true, video: true, preferCurrentTab: false, selfBrowserSurface: 'exclude', systemAudio: 'include', windowAudio: 'system' }
-      const stream = await window.navigator.mediaDevices.getDisplayMedia(displayOptions)
+      stream = await window.navigator.mediaDevices.getDisplayMedia(displayOptions)
       if (!stream.getAudioTracks().length) {
         stream.getTracks().forEach(track => track.stop())
         setError('Nenhum áudio foi compartilhado. Escolha a aba ou janela da reunião e ative “Compartilhar áudio”.')
@@ -387,8 +400,9 @@ function HomePage() {
       await connectSource('tab', stream, session)
     } catch (cause) {
       releaseSource('tab')
+      stream?.getTracks().forEach(track => track.stop())
       await endSessionIfUnused()
-      setError(cause instanceof DOMException && cause.name === 'NotAllowedError' ? 'A escolha da aba foi cancelada ou não foi permitida.' : 'Não foi possível iniciar o áudio da aba agora. Tente novamente.')
+      setError(captureErrorMessage(cause, 'tab'))
     }
   }
 
@@ -411,7 +425,7 @@ function HomePage() {
   const currentSuggestion = suggestions[0]
   const currentAnswer = currentSuggestion.answers[suggestionVersion]
   const callStatus = !isCallActive ? 'Call encerrada' : microphoneOn && tabAudioOn ? 'Você e cliente sendo transcritos' : microphoneOn ? 'Microfone sendo transcrito' : 'Áudio da aba sendo transcrito'
-  const displayedTranscript = liveMessages.length ? liveMessages : transcript
+  const displayedTranscript = liveMessages
 
   return <div className="call-page">
     <ErrorNotice message={error} />
@@ -434,12 +448,13 @@ function HomePage() {
 
     <main className="call-workspace">
       <section className="workspace-panel transcript-panel" aria-labelledby="transcript-title">
-        <header className="panel-header"><div><span className="panel-kicker"><Icon name="transcript" size={17} />Transcrição ao vivo</span><h1 id="transcript-title">A conversa, no ritmo da call.</h1></div><span className="demo-label">Demonstração</span></header>
+        <header className="panel-header"><div><span className="panel-kicker"><Icon name="transcript" size={17} />Transcrição ao vivo</span><h1 id="transcript-title">A conversa, no ritmo da call.</h1></div></header>
         <div className="transcript-scroll">
           <p className="call-start">Hoje · 09:30 <span>•</span> {isCallActive ? 'Transcrição em tempo real' : 'Aguardando início da call'}</p>
+          {!displayedTranscript.length && !partialTranscripts.microphone && !partialTranscripts.tab && <p className="transcript-empty" role="status">Inicie o microfone ou compartilhe o áudio da aba. As falas transcritas aparecerão aqui.</p>}
           {displayedTranscript.map((message, index) => <article className={`message-row ${message.speaker === 'you' ? 'from-you' : 'from-client'}`} key={`${message.time}-${index}`}>
             {message.speaker === 'client' && <span className="message-avatar" aria-hidden="true">RC</span>}
-            <div className="message-content"><div className="message-meta"><strong>{message.speaker === 'you' ? 'Você' : ('source' in message && message.source === 'tab' ? 'Cliente' : 'Rafaela')}</strong><time>{message.time}</time></div><p>{message.text}</p></div>
+            <div className="message-content"><div className="message-meta"><strong>{message.speaker === 'you' ? 'Você' : 'Cliente'}</strong><time>{message.time}</time></div><p>{message.text}</p></div>
             {message.speaker === 'you' && <span className="message-avatar you-avatar" aria-hidden="true">VO</span>}
           </article>)}
           {partialTranscripts.microphone && <article className="message-row from-you"><div className="message-content"><div className="message-meta"><strong>Você</strong><time>agora</time></div><p>{partialTranscripts.microphone}</p></div><span className="message-avatar you-avatar" aria-hidden="true">VO</span></article>}
