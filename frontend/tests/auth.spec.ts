@@ -20,7 +20,7 @@ test('cadastro individual, termos, login e saída', async ({ page }) => {
   await page.getByLabel('Senha').fill(password)
   await page.getByRole('button', { name: /Entrar na minha conta/ }).click()
   await expect(page.getByRole('heading', { name: 'A conversa, no ritmo da call.' })).toBeVisible()
-  await expect(page.getByText('Rafaela Costa')).toBeVisible()
+  await expect(page.getByText('Pessoa Teste')).toBeVisible()
   await expect(page.getByText('Inicie o microfone ou compartilhe o áudio da aba. As falas transcritas aparecerão aqui.')).toBeVisible()
   await page.getByRole('button', { name: 'Abrir configurações da call' }).click()
   await page.getByRole('button', { name: /Sair da conta/ }).click()
