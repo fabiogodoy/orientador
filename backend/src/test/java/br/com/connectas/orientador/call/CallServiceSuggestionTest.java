@@ -34,7 +34,7 @@ class CallServiceSuggestionTest {
 
     @Test
     void generatesOnlyFromAuthorizedOrderedCallSegments() {
-        Identity identity = new Identity(userId, tenantId, "Pessoa", "pessoa@example.com", Role.INDIVIDUAL, AccountType.INDIVIDUAL, null, Instant.MAX);
+        Identity identity = new Identity(userId, tenantId, "Pessoa", "pessoa@example.com", Role.INDIVIDUAL, AccountType.INDIVIDUAL, null, Instant.MAX, null);
         when(accounts.currentIdentity(userId)).thenReturn(identity);
         when(jdbc.queryForObject(anyString(), eq(Integer.class), eq(callId), eq(tenantId), eq(userId))).thenReturn(1);
         List<SuggestionContextSegment> segments = List.of(
@@ -50,7 +50,7 @@ class CallServiceSuggestionTest {
 
     @Test
     void rejectsGenerationWithoutClientSpeech() {
-        Identity identity = new Identity(userId, tenantId, "Pessoa", "pessoa@example.com", Role.INDIVIDUAL, AccountType.INDIVIDUAL, null, Instant.MAX);
+        Identity identity = new Identity(userId, tenantId, "Pessoa", "pessoa@example.com", Role.INDIVIDUAL, AccountType.INDIVIDUAL, null, Instant.MAX, null);
         when(accounts.currentIdentity(userId)).thenReturn(identity);
         when(jdbc.queryForObject(anyString(), eq(Integer.class), eq(callId), eq(tenantId), eq(userId))).thenReturn(1);
         when(jdbc.query(anyString(), any(RowMapper.class), eq(callId), eq(tenantId)))

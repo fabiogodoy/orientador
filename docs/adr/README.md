@@ -12,7 +12,7 @@ Nunca reutilizar um número já listado, mesmo que o trabalho tenha sido feito e
 
 ## Próximo número livre
 
-`ADR-0005`
+`ADR-0006`
 
 ## ADRs registradas
 
@@ -22,3 +22,4 @@ Nunca reutilizar um número já listado, mesmo que o trabalho tenha sido feito e
 | ADR-0002 | Transcrição Realtime OpenAI com segredo efêmero | `intent/transcricao-microfone-tempo-real.md` |
 | ADR-0003 | Duas fontes Realtime independentes por call | `intent/audio-aba-cliente.md` |
 | ADR-0004 | Geração de sugestões comerciais no backend com OpenAI | `intent/sugestoes-fala-tempo-real.md` |
+| ADR-0005 | Avatar de perfil normalizado no PostgreSQL | `intent/perfil-do-usuario.md` |

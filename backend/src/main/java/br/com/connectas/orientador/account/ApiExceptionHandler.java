@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -21,6 +22,16 @@ public class ApiExceptionHandler {
     @ExceptionHandler(AccountService.InvalidRegistrationException.class)
     ResponseEntity<Map<String, String>> invalidRegistration(AccountService.InvalidRegistrationException exception) {
         return error(HttpStatus.BAD_REQUEST, "INVALID_REGISTRATION", exception.getMessage());
+    }
+
+    @ExceptionHandler(AccountService.InvalidProfileException.class)
+    ResponseEntity<Map<String, String>> invalidProfile(AccountService.InvalidProfileException exception) {
+        return error(HttpStatus.BAD_REQUEST, "INVALID_PROFILE", exception.getMessage());
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    ResponseEntity<Map<String, String>> avatarTooLarge() {
+        return error(HttpStatus.BAD_REQUEST, "AVATAR_TOO_LARGE", "A foto deve ter até 10 MB.");
     }
 
     @ExceptionHandler(AccountService.AccountConflictException.class)

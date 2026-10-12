@@ -62,7 +62,7 @@ it('exibe login e contato para senha esquecida', () => {
 describe('tela principal de call', () => {
   const account = {
     id: 'user-1', name: 'Vanessa Oliveira', email: 'vanessa@example.com', role: 'INDIVIDUAL' as const,
-    accountType: 'INDIVIDUAL' as const, organizationName: null, trialEndsAt: '2026-10-18T12:00:00Z',
+    accountType: 'INDIVIDUAL' as const, organizationName: null, trialEndsAt: '2026-10-18T12:00:00Z', avatarUpdatedAt: null,
   }
 
   beforeEach(() => {
@@ -259,5 +259,28 @@ describe('tela principal de call', () => {
     await waitFor(() => expect(channel.send).toHaveBeenCalledWith(JSON.stringify({ type: 'input_audio_buffer.commit' })), { timeout: 1800 })
     fireEvent.click(screen.getByRole('button', { name: 'Parar de escutar microfone' }))
     await waitFor(() => expect(audioContext.close).toHaveBeenCalled())
+  })
+
+  it('usa a identidade da conta e permite editar o nome pelo perfil', async () => {
+    const renamed = { ...account, name: 'Vanessa Costa' }
+    const fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/auth/me')) return Promise.resolve(new Response(JSON.stringify(account), { status: 200 }))
+      if (url.includes('/api/auth/csrf')) return Promise.resolve(new Response(JSON.stringify({ token: 'csrf-test' }), { status: 200 }))
+      if (url.includes('/api/profile')) return Promise.resolve(new Response(JSON.stringify(renamed), { status: 200 }))
+      return Promise.resolve(new Response(null, { status: 204 }))
+    })
+    vi.stubGlobal('fetch', fetch)
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'A conversa, no ritmo da call.' })
+    expect(screen.getByText('Vanessa Oliveira')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir seu perfil' }))
+    expect(screen.getByRole('dialog', { name: 'Perfil' })).toBeInTheDocument()
+    expect(screen.getByLabelText('E-mail')).toHaveValue('vanessa@example.com')
+    fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Vanessa Costa' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar nome' }))
+    expect(await screen.findByText('Vanessa Costa')).toBeInTheDocument()
+    expect(fetch.mock.calls.some(([input]) => String(input).includes('/api/profile'))).toBe(true)
   })
 })

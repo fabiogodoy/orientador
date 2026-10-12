@@ -21,7 +21,7 @@ class AccountServiceTest {
     void trialExpiresAtExclusiveBoundary() {
         Instant end = Instant.parse("2026-10-17T10:00:00Z");
         Identity identity = new Identity(UUID.randomUUID(), UUID.randomUUID(), "Pessoa", "a@example.com",
-                Role.INDIVIDUAL, AccountType.INDIVIDUAL, null, end);
+                Role.INDIVIDUAL, AccountType.INDIVIDUAL, null, end, null);
         assertFalse(identity.trialExpiredAt(end.minusNanos(1)));
         assertTrue(identity.trialExpiredAt(end));
     }

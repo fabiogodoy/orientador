@@ -44,6 +44,14 @@ _Evitar_: resposta definitiva, registro de transcrição
 Identidade de uma pessoa que entra no Orientador. Não é sinônimo de tenant: uma organização pode ter várias contas de acesso.
 _Evitar_: conta como sinônimo de organização ou espaço de dados
 
+**Perfil do usuário:**
+Informações pessoais editáveis da conta de acesso autenticada, incluindo nome e foto de perfil. O perfil pertence à pessoa, não ao tenant, organização ou reunião.
+_Evitar_: perfil do cliente da call, perfil da organização
+
+**Foto de perfil:**
+Imagem quadrada associada à conta de acesso, exibida como avatar circular. É opcional, pode ser removida pela própria pessoa e não é reutilizada como imagem de participante da reunião.
+_Evitar_: foto do cliente, gravação de vídeo
+
 **Período de avaliação:**
 Intervalo gratuito de sete dias concedido ao tenant quando ele é criado. Ao terminar, seus usuários não entram na área autenticada até existir uma forma futura de reativação.
 _Evitar_: assinatura ativa, pagamento ou prazo individual de cada membro

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import logoUrl from '../../assets/brand/orientador-logo.svg'
 import logoLightUrl from '../../assets/brand/orientador-logo-light.svg'
@@ -202,6 +202,86 @@ class RealtimeConnectionError extends Error {
 const speakerForSource: Record<AudioSource, TranscriptSpeaker> = { microphone: 'you', tab: 'client' }
 const apiSpeakerForSource = (source: AudioSource) => source === 'microphone' ? 'USER' : 'CLIENT'
 
+function initials(name: string) {
+  return name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || '?'
+}
+
+function ProfileDialog({ account, onClose, onAccountChange }: { account: Account; onClose: () => void; onAccountChange: (account: Account) => void }) {
+  const [name, setName] = useState(account.name)
+  const [cropUrl, setCropUrl] = useState<string | null>(null)
+  const [cropSize, setCropSize] = useState<{ width: number; height: number } | null>(null)
+  const [zoom, setZoom] = useState(1)
+  const [positionX, setPositionX] = useState(0)
+  const [positionY, setPositionY] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => () => { if (cropUrl) URL.revokeObjectURL(cropUrl) }, [cropUrl])
+
+  function selectPhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { setError('Escolha uma imagem JPG, PNG ou WebP.'); return }
+    if (file.size > 10 * 1024 * 1024) { setError('A foto deve ter até 10 MB.'); return }
+    if (cropUrl) URL.revokeObjectURL(cropUrl)
+    setCropUrl(URL.createObjectURL(file)); setCropSize(null); setZoom(1); setPositionX(0); setPositionY(0); setError(null)
+  }
+
+  async function saveName(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusy(true); setError(null)
+    try { onAccountChange(await api.updateProfile(name.trim())) }
+    catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Não foi possível salvar seu nome.') }
+    finally { setBusy(false) }
+  }
+
+  async function savePhoto() {
+    if (!cropUrl || !cropSize) return
+    setBusy(true); setError(null)
+    try {
+      const image = new Image()
+      image.src = cropUrl
+      await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error()) })
+      const cropSide = Math.min(cropSize.width, cropSize.height) / zoom
+      const extraX = (cropSize.width - cropSide) / 2
+      const extraY = (cropSize.height - cropSide) / 2
+      const sourceX = Math.max(0, Math.min(cropSize.width - cropSide, extraX + positionX * extraX))
+      const sourceY = Math.max(0, Math.min(cropSize.height - cropSide, extraY + positionY * extraY))
+      const canvas = document.createElement('canvas'); canvas.width = 512; canvas.height = 512
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error()
+      context.drawImage(image, sourceX, sourceY, cropSide, cropSide, 0, 0, 512, 512)
+      const png = await new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error()), 'image/png'))
+      onAccountChange(await api.uploadAvatar(png))
+      URL.revokeObjectURL(cropUrl); setCropUrl(null); setCropSize(null)
+    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Não foi possível salvar a foto. Tente outra imagem.') }
+    finally { setBusy(false) }
+  }
+
+  async function removePhoto() {
+    setBusy(true); setError(null)
+    try { onAccountChange(await api.removeAvatar()) }
+    catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Não foi possível remover a foto.') }
+    finally { setBusy(false) }
+  }
+
+  const avatarUrl = account.avatarUpdatedAt ? api.avatarUrl(account.avatarUpdatedAt) : null
+  const role = account.accountType === 'ORGANIZATION' ? `Gestor(a) · ${account.organizationName}` : 'Conta individual'
+  return <div className="profile-backdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) onClose() }}>
+    <section className="profile-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-title">
+      <header><div><span className="profile-kicker">SUA CONTA</span><h2 id="profile-title">Perfil</h2></div><button className="profile-close" type="button" onClick={onClose} aria-label="Fechar perfil">×</button></header>
+      <ErrorNotice message={error} />
+      <div className="profile-avatar-section">
+        <div className="profile-avatar-large">{avatarUrl ? <img src={avatarUrl} alt="Sua foto de perfil" /> : initials(account.name)}</div>
+        <div><strong>Foto de perfil</strong><p>JPG, PNG ou WebP, até 10 MB.</p><label className="subtle-button file-picker">Escolher foto<input type="file" accept="image/jpeg,image/png,image/webp" onChange={selectPhoto} /></label>{avatarUrl && <button className="text-danger" type="button" disabled={busy} onClick={() => void removePhoto()}>Remover foto</button>}</div>
+      </div>
+      {cropUrl && <div className="crop-editor"><div className="crop-preview">{cropSize && <img src={cropUrl} alt="Prévia do recorte da foto" style={{ transform: `translate(${positionX * 16}%, ${positionY * 16}%) scale(${zoom})` }} />}</div><img className="crop-loader" src={cropUrl} alt="" onLoad={event => setCropSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} /><label>Zoom<input aria-label="Zoom da foto" type="range" min="1" max="3" step="0.01" value={zoom} onChange={event => setZoom(Number(event.target.value))} /></label><label>Horizontal<input aria-label="Posição horizontal da foto" type="range" min="-1" max="1" step="0.01" value={positionX} onChange={event => setPositionX(Number(event.target.value))} /></label><label>Vertical<input aria-label="Posição vertical da foto" type="range" min="-1" max="1" step="0.01" value={positionY} onChange={event => setPositionY(Number(event.target.value))} /></label><button className="primary-button crop-save" type="button" disabled={busy || !cropSize} onClick={() => void savePhoto()}>{busy ? 'Salvando…' : 'Aplicar recorte'}</button></div>}
+      <form className="profile-form" onSubmit={saveName}><label htmlFor="profile-name">Nome</label><input id="profile-name" maxLength={120} required value={name} onChange={event => setName(event.target.value)} /><label htmlFor="profile-email">E-mail</label><input id="profile-email" value={account.email} readOnly aria-readonly="true" /><small>{role}</small><button className="primary-button" type="submit" disabled={busy || name.trim() === account.name}> {busy ? 'Salvando…' : 'Salvar nome'} </button></form>
+    </section>
+  </div>
+}
+
 function HomePage() {
   const [account, setAccount] = useState<Account | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -214,6 +294,7 @@ function HomePage() {
   const [suggestionError, setSuggestionError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
   const [meetingTitle, setMeetingTitle] = useState(FALLBACK_MEETING_TITLE)
   const [meetingTitleDraft, setMeetingTitleDraft] = useState(FALLBACK_MEETING_TITLE)
   const [editingMeetingTitle, setEditingMeetingTitle] = useState(false)
@@ -617,6 +698,8 @@ function HomePage() {
   if (!account) return <div className="loading-page" role="status">{error ?? 'Carregando seu espaço…'}</div>
   const callStatus = !isCallActive ? 'Call encerrada' : microphoneOn && tabAudioOn ? 'Você e cliente sendo transcritos' : microphoneOn ? 'Microfone sendo transcrito' : tabAudioOn ? 'Áudio da aba sendo transcrito' : 'Call em pausa'
   const displayedTranscript = liveMessages
+  const avatarUrl = account.avatarUpdatedAt ? api.avatarUrl(account.avatarUpdatedAt) : null
+  const accountContext = account.accountType === 'ORGANIZATION' ? `Gestor(a) · ${account.organizationName}` : 'Conta individual'
 
   return <div className="call-page">
     <ErrorNotice message={error} />
@@ -629,7 +712,7 @@ function HomePage() {
         <div className="meeting-title">
           {editingMeetingTitle ? <form onSubmit={saveMeetingTitle}><label htmlFor="meeting-title">Título da reunião</label><input id="meeting-title" value={meetingTitleDraft} maxLength={160} onChange={event => setMeetingTitleDraft(event.target.value)} autoFocus /><button type="submit">Salvar</button></form> : <><span>Reunião</span><strong title={meetingTitle}>{meetingTitle}</strong><button type="button" onClick={() => { setMeetingTitleDraft(meetingTitle); setEditingMeetingTitle(true) }}>Editar título da reunião</button></>}
         </div>
-        <div className="client-identity"><span className="client-avatar">RC</span><span><strong>Rafaela Costa</strong><small>Diretora comercial · Orbit</small></span></div>
+        <button type="button" className="client-identity" onClick={() => setProfileOpen(true)} aria-label="Abrir seu perfil"><span className="client-avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : initials(account.name)}</span><span><strong>{account.name}</strong><small>{accountContext}</small></span></button>
       </div>
       <div className="call-actions">
         <button type="button" className={`icon-control ${microphoneOn ? 'is-on' : ''}`} aria-label={microphoneOn ? 'Parar de escutar microfone' : 'Escutar microfone'} aria-pressed={microphoneOn} onClick={() => void toggleMicrophone()}><Icon name="microphone" /></button>
@@ -675,6 +758,7 @@ function HomePage() {
       </section>
     </main>
     <div className="call-bottom-note">Microfone e áudio compartilhado são transcritos de forma independente. O Orientador salva somente o texto final.</div>
+    {profileOpen && <ProfileDialog account={account} onClose={() => setProfileOpen(false)} onAccountChange={setAccount} />}
   </div>
 }
 

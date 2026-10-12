@@ -9,6 +9,7 @@ export type Account = {
   accountType: AccountType
   organizationName: string | null
   trialEndsAt: string
+  avatarUpdatedAt: string | null
 }
 
 export type Registration = {
@@ -43,7 +44,7 @@ async function getCsrfToken(): Promise<string> {
   return csrfToken
 }
 
-async function request<T>(path: string, method: 'GET' | 'POST' | 'PATCH', body?: unknown): Promise<T> {
+async function request<T>(path: string, method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', body?: unknown): Promise<T> {
   const headers: Record<string, string> = {}
   if (method !== 'GET') {
     headers['Content-Type'] = 'application/json'
@@ -68,10 +69,33 @@ async function request<T>(path: string, method: 'GET' | 'POST' | 'PATCH', body?:
   return (await response.json()) as T
 }
 
+async function upload(path: string, file: Blob): Promise<Account> {
+  const form = new FormData()
+  form.append('avatar', file, 'avatar.png')
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      method: 'PUT', credentials: 'include',
+      headers: { 'X-CSRF-TOKEN': await getCsrfToken() }, body: form,
+    })
+  } catch {
+    throw new ApiError('NETWORK_ERROR', 'Não foi possível enviar a foto. Tente novamente.')
+  }
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({})) as { code?: string; message?: string }
+    throw new ApiError(data.code ?? 'REQUEST_ERROR', data.message ?? 'Não foi possível enviar a foto.')
+  }
+  return (await response.json()) as Account
+}
+
 export const api = {
   register: (data: Registration) => request<Account>('/api/auth/register', 'POST', data),
   login: (email: string, password: string) => request<Account>('/api/auth/login', 'POST', { email, password }),
   me: () => request<Account>('/api/auth/me', 'GET'),
+  updateProfile: (name: string) => request<Account>('/api/profile', 'PATCH', { name }),
+  uploadAvatar: (file: Blob) => upload('/api/profile/avatar', file),
+  removeAvatar: () => request<Account>('/api/profile/avatar', 'DELETE'),
+  avatarUrl: (updatedAt: string) => `${API_URL}/api/profile/avatar?v=${encodeURIComponent(updatedAt)}`,
   logout: async () => {
     await request<void>('/api/auth/logout', 'POST')
     csrfToken = null

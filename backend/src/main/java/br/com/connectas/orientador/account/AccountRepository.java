@@ -13,7 +13,7 @@ import org.springframework.stereotype.Repository;
 public class AccountRepository {
     private static final String SELECT_IDENTITY = """
             SELECT u.id, u.tenant_id, u.name, u.email, u.password_hash, u.role,
-                   t.type, t.name AS organization_name, t.trial_ends_at
+                   t.type, t.name AS organization_name, t.trial_ends_at, u.avatar_updated_at
             FROM users u JOIN tenants t ON t.id = u.tenant_id
             """;
 
@@ -49,6 +49,25 @@ public class AccountRepository {
                 userId, version, Timestamp.from(acceptedAt));
     }
 
+    public void updateName(UUID userId, String name) {
+        jdbc.update("UPDATE users SET name = ? WHERE id = ?", name, userId);
+    }
+
+    public void updateAvatar(UUID userId, byte[] content, Instant updatedAt) {
+        jdbc.update("UPDATE users SET avatar_content = ?, avatar_media_type = 'image/png', avatar_updated_at = ? WHERE id = ?",
+                content, Timestamp.from(updatedAt), userId);
+    }
+
+    public void removeAvatar(UUID userId) {
+        jdbc.update("UPDATE users SET avatar_content = NULL, avatar_media_type = NULL, avatar_updated_at = NULL WHERE id = ?", userId);
+    }
+
+    public StoredAvatar findAvatarByUserId(UUID userId) {
+        return jdbc.query("SELECT avatar_content, avatar_media_type FROM users WHERE id = ? AND avatar_content IS NOT NULL",
+                        (rs, row) -> new StoredAvatar(rs.getBytes("avatar_content"), rs.getString("avatar_media_type")), userId)
+                .stream().findFirst().orElse(null);
+    }
+
     private static StoredAccount mapAccount(ResultSet rs, int row) throws SQLException {
         Identity identity = new Identity(
                 rs.getObject("id", UUID.class),
@@ -58,10 +77,14 @@ public class AccountRepository {
                 Role.valueOf(rs.getString("role")),
                 AccountType.valueOf(rs.getString("type")),
                 rs.getString("organization_name"),
-                rs.getTimestamp("trial_ends_at").toInstant());
+                rs.getTimestamp("trial_ends_at").toInstant(),
+                rs.getTimestamp("avatar_updated_at") == null ? null : rs.getTimestamp("avatar_updated_at").toInstant());
         return new StoredAccount(identity, rs.getString("password_hash"));
     }
 
     public record StoredAccount(Identity identity, String passwordHash) {
+    }
+
+    public record StoredAvatar(byte[] content, String mediaType) {
     }
 }

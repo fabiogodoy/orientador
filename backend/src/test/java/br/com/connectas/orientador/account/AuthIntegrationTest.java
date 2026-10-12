@@ -15,6 +15,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.sql.Timestamp;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
@@ -169,6 +170,37 @@ class AuthIntegrationTest {
     }
 
     @Test
+    void authenticatedUserCanUpdateAndRemoveOnlyTheirProfileData() throws Exception {
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE version='05'", Integer.class));
+        String email = uniqueEmail();
+        register(email, "INDIVIDUAL", null, true, AccountService.TERMS_VERSION);
+        assertEquals(200, post("/api/auth/login", loginJson(email)).statusCode());
+
+        HttpResponse<String> renamed = patch("/api/profile", "{\"name\":\" Pessoa Renomeada \"}");
+        assertEquals(200, renamed.statusCode(), renamed.body());
+        assertTrue(renamed.body().contains("Pessoa Renomeada"));
+        assertEquals("Pessoa Renomeada", jdbc.queryForObject("SELECT name FROM users WHERE email=?", String.class, email));
+        assertEquals(400, patch("/api/profile", "{\"name\":\" \"}").statusCode());
+
+        java.awt.image.BufferedImage sourceAvatar = new java.awt.image.BufferedImage(1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        java.io.ByteArrayOutputStream encodedAvatar = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(sourceAvatar, "png", encodedAvatar);
+        byte[] png = encodedAvatar.toByteArray();
+        HttpResponse<String> uploaded = uploadAvatar(png);
+        assertEquals(200, uploaded.statusCode(), uploaded.body());
+        assertTrue(uploaded.body().contains("avatarUpdatedAt"));
+        HttpResponse<byte[]> avatar = client.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/profile/avatar"))
+                .GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+        assertEquals(200, avatar.statusCode());
+        assertEquals("image/png", avatar.headers().firstValue("Content-Type").orElse(null));
+        java.awt.image.BufferedImage decodedAvatar = javax.imageio.ImageIO.read(new java.io.ByteArrayInputStream(avatar.body()));
+        assertEquals(512, decodedAvatar.getWidth());
+        assertEquals(512, decodedAvatar.getHeight());
+        assertEquals(200, delete("/api/profile/avatar").statusCode());
+        assertEquals(404, send("GET", "/api/profile/avatar", null, null).statusCode());
+    }
+
+    @Test
     void finalizedTranscriptIsPersistedForTheAuthenticatedCallOnly() throws Exception {
         assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE version='02'", Integer.class));
         assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE version='03'", Integer.class));
@@ -234,6 +266,27 @@ class AuthIntegrationTest {
 
     private HttpResponse<String> patch(String path, String body) throws Exception {
         return send("PATCH", path, body, token);
+    }
+
+    private HttpResponse<String> delete(String path) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .header("X-CSRF-TOKEN", token).DELETE().build();
+        return client.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> uploadAvatar(byte[] png) throws Exception {
+        String boundary = "profile-test-boundary";
+        byte[] prefix = ("--" + boundary + "\r\nContent-Disposition: form-data; name=\"avatar\"; filename=\"avatar.png\"\r\n"
+                + "Content-Type: image/png\r\n\r\n").getBytes(StandardCharsets.UTF_8);
+        byte[] suffix = ("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8);
+        byte[] body = new byte[prefix.length + png.length + suffix.length];
+        System.arraycopy(prefix, 0, body, 0, prefix.length);
+        System.arraycopy(png, 0, body, prefix.length, png.length);
+        System.arraycopy(suffix, 0, body, prefix.length + png.length, suffix.length);
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/profile/avatar"))
+                .header("X-CSRF-TOKEN", token).header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .PUT(HttpRequest.BodyPublishers.ofByteArray(body)).build();
+        return client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
     private HttpResponse<String> send(String method, String path, String body, String csrf) throws Exception {
