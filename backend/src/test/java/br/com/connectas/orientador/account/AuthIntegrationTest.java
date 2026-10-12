@@ -156,23 +156,46 @@ class AuthIntegrationTest {
                 .header("Origin", "http://localhost:5173").GET().build();
         HttpRequest foreign = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/auth/csrf"))
                 .header("Origin", "https://foreign.example").GET().build();
+        HttpRequest titlePreflight = HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/calls/00000000-0000-0000-0000-000000000000/title"))
+                .header("Origin", "http://localhost:5173")
+                .header("Access-Control-Request-Method", "PATCH")
+                .method("OPTIONS", HttpRequest.BodyPublishers.noBody()).build();
         assertEquals("http://localhost:5173", client.send(allowed, HttpResponse.BodyHandlers.ofString())
                 .headers().firstValue("Access-Control-Allow-Origin").orElse(null));
         assertTrue(client.send(foreign, HttpResponse.BodyHandlers.ofString())
                 .headers().firstValue("Access-Control-Allow-Origin").isEmpty());
+        assertTrue(client.send(titlePreflight, HttpResponse.BodyHandlers.ofString())
+                .headers().firstValue("Access-Control-Allow-Methods").orElse("").contains("PATCH"));
     }
 
     @Test
     void finalizedTranscriptIsPersistedForTheAuthenticatedCallOnly() throws Exception {
         assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE version='02'", Integer.class));
         assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE version='03'", Integer.class));
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE version='04'", Integer.class));
         String ownerEmail = uniqueEmail();
+        String otherEmail = uniqueEmail();
         register(ownerEmail, "INDIVIDUAL", null, true, AccountService.TERMS_VERSION);
+        register(otherEmail, "INDIVIDUAL", null, true, AccountService.TERMS_VERSION);
         assertEquals(200, post("/api/auth/login", loginJson(ownerEmail)).statusCode());
         UUID ownerId = jdbc.queryForObject("SELECT id FROM users WHERE email=?", UUID.class, ownerEmail);
         UUID tenantId = jdbc.queryForObject("SELECT tenant_id FROM users WHERE email=?", UUID.class, ownerEmail);
+        UUID otherId = jdbc.queryForObject("SELECT id FROM users WHERE email=?", UUID.class, otherEmail);
+        UUID otherTenantId = jdbc.queryForObject("SELECT tenant_id FROM users WHERE email=?", UUID.class, otherEmail);
         UUID callId = UUID.randomUUID();
         jdbc.update("INSERT INTO call_sessions (id, tenant_id, user_id, status, started_at) VALUES (?, ?, ?, 'ACTIVE', ?)", callId, tenantId, ownerId, Timestamp.from(START));
+        UUID otherCallId = UUID.randomUUID();
+        jdbc.update("INSERT INTO call_sessions (id, tenant_id, user_id, status, started_at) VALUES (?, ?, ?, 'ACTIVE', ?)", otherCallId, otherTenantId, otherId, Timestamp.from(START));
+
+        assertEquals("Reunião sem título", jdbc.queryForObject("SELECT title FROM call_sessions WHERE id=?", String.class, callId));
+        assertEquals(400, patch("/api/calls/" + callId + "/title", "{\"title\":\" \",\"automatic\":false}").statusCode());
+        HttpResponse<String> titled = patch("/api/calls/" + callId + "/title", "{\"title\":\" Discovery do trimestre \",\"automatic\":false}");
+        assertEquals(200, titled.statusCode(), titled.body());
+        assertTrue(titled.body().contains("Discovery do trimestre"));
+        assertEquals("Discovery do trimestre", jdbc.queryForObject("SELECT title FROM call_sessions WHERE id=?", String.class, callId));
+        assertEquals(200, patch("/api/calls/" + callId + "/title", "{\"title\":\"Outra aba\",\"automatic\":true}").statusCode());
+        assertEquals("Discovery do trimestre", jdbc.queryForObject("SELECT title FROM call_sessions WHERE id=?", String.class, callId));
+        assertEquals(404, patch("/api/calls/" + otherCallId + "/title", "{\"title\":\"Tentativa externa\",\"automatic\":false}").statusCode());
 
         assertEquals(400, post("/api/calls/" + callId + "/segments", "{\"sequenceNumber\":1,\"text\":\"Fala inválida.\",\"speaker\":\"BOT\"}").statusCode());
         HttpResponse<String> persisted = post("/api/calls/" + callId + "/segments", "{\"sequenceNumber\":1,\"text\":\" Trecho final da conversa. \",\"speaker\":\"CLIENT\"}");
@@ -181,6 +204,8 @@ class AuthIntegrationTest {
         assertEquals("CLIENT", jdbc.queryForObject("SELECT speaker FROM transcript_segments WHERE call_session_id=?", String.class, callId));
         assertEquals(204, post("/api/calls/" + callId + "/end", "{}").statusCode());
         assertEquals("ENDED", jdbc.queryForObject("SELECT status FROM call_sessions WHERE id=?", String.class, callId));
+        assertEquals(200, patch("/api/calls/" + callId + "/title", "{\"title\":\"Discovery final\",\"automatic\":false}").statusCode());
+        assertEquals("Discovery final", jdbc.queryForObject("SELECT title FROM call_sessions WHERE id=?", String.class, callId));
         assertEquals(404, post("/api/calls/" + callId + "/segments", "{\"sequenceNumber\":2,\"text\":\"Não deve entrar.\",\"speaker\":\"USER\"}").statusCode());
         assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM transcript_segments WHERE call_session_id=?", Integer.class, callId));
     }
@@ -207,10 +232,14 @@ class AuthIntegrationTest {
         return send("POST", path, body, token);
     }
 
+    private HttpResponse<String> patch(String path, String body) throws Exception {
+        return send("PATCH", path, body, token);
+    }
+
     private HttpResponse<String> send(String method, String path, String body, String csrf) throws Exception {
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path));
         if (csrf != null) request.header("X-CSRF-TOKEN", csrf);
-        if (method.equals("POST")) request.header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body));
+        if (method.equals("POST") || method.equals("PATCH")) request.header("Content-Type", "application/json").method(method, HttpRequest.BodyPublishers.ofString(body));
         else request.GET();
         return client.send(request.build(), HttpResponse.BodyHandlers.ofString());
     }

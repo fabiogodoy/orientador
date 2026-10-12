@@ -74,6 +74,7 @@ test('tela da call alterna controles e adapta o layout sem depender da API real'
   await expect(page.getByRole('heading', { name: 'Próxima melhor resposta' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Escutar microfone' })).toHaveAttribute('aria-pressed', 'false')
   await expect(page.getByRole('button', { name: 'Escutar áudio da aba' })).toHaveAttribute('aria-pressed', 'false')
+  await expect(page.getByRole('button', { name: 'Editar título da reunião' })).toBeVisible()
   await page.getByRole('button', { name: 'Gerar outra' }).click()
   await expect(page.getByText(/Antes de comparar apenas o valor/)).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath('tela-call-desktop.png'), fullPage: true })

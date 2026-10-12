@@ -111,6 +111,14 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .live-status.is-ended { color: #9a6572; background: #fbeff1; }
 .call-timer { display: inline-flex; align-items: center; gap: 7px; flex: none; color: #527078; font-size: .93rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .context-divider { width: 1px; height: 32px; background: #e0eae7; }
+.meeting-title { display: grid; min-width: 0; gap: 2px; }
+.meeting-title > span, .meeting-title label { color: #93a5a7; font-size: .62rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.meeting-title > strong { overflow: hidden; max-width: 190px; color: #315560; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
+.meeting-title > button { width: fit-content; padding: 0; border: 0; color: #23816d; background: transparent; font-size: .67rem; font-weight: 800; text-align: left; }
+.meeting-title form { display: flex; align-items: center; gap: 6px; }
+.meeting-title form label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.meeting-title input { width: 170px; height: 30px; padding: 0 8px; border: 1px solid #9ed8c9; border-radius: 7px; color: #315560; font: inherit; outline: none; }
+.meeting-title form button { height: 30px; padding: 0 8px; border: 0; border-radius: 7px; color: #fff; background: #248976; font-size: .7rem; font-weight: 800; }
 .client-identity { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .client-avatar, .message-avatar { display: grid; flex: none; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: #fff; background: linear-gradient(135deg, #2dbdd0, #2384a7); font-size: .65rem; font-weight: 850; letter-spacing: .04em; }
 .client-identity strong, .client-identity small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -244,6 +252,9 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
   .client-identity > span:last-child { min-width: 0; }
   .client-identity strong { max-width: 72px; }
   .context-divider, .client-identity small { display: none; }
+  .meeting-title { flex: 1; }
+  .meeting-title > strong { max-width: 150px; }
+  .meeting-title input { width: min(150px, 42vw); }
   .call-actions { gap: 7px; }
   .icon-control { width: 38px; height: 38px; }
   .suggest-button, .end-button { width: 38px; padding: 0; font-size: 0; }

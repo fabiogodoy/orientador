@@ -205,6 +205,7 @@ type AudioSource = 'microphone' | 'tab'
 type TranscriptSpeaker = 'you' | 'client'
 type SourceCapture = { stream: MediaStream; connection: RTCPeerConnection }
 type DisplayAudioOptions = DisplayMediaStreamOptions & { preferCurrentTab?: boolean; selfBrowserSurface?: 'exclude'; systemAudio?: 'include'; windowAudio?: 'system' }
+const FALLBACK_MEETING_TITLE = 'Reunião sem título'
 
 class RealtimeConnectionError extends Error {
   constructor(readonly status: number) {
@@ -226,13 +227,22 @@ function HomePage() {
   const [expandedSuggestion, setExpandedSuggestion] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [meetingTitle, setMeetingTitle] = useState(FALLBACK_MEETING_TITLE)
+  const [meetingTitleDraft, setMeetingTitleDraft] = useState(FALLBACK_MEETING_TITLE)
+  const [editingMeetingTitle, setEditingMeetingTitle] = useState(false)
   const [liveMessages, setLiveMessages] = useState<{ speaker: TranscriptSpeaker; time: string; text: string; source: AudioSource }[]>([])
   const [partialTranscripts, setPartialTranscripts] = useState<Record<AudioSource, string>>({ microphone: '', tab: '' })
   const sourceCaptures = useRef<Record<AudioSource, SourceCapture | null>>({ microphone: null, tab: null })
   const callSessionId = useRef<string | null>(null)
-  const sessionStart = useRef<Promise<{ sessionId: string; clientSecret: string }> | null>(null)
+  const lastCallSessionId = useRef<string | null>(null)
+  const sessionStart = useRef<Promise<{ sessionId: string; clientSecret: string; title: string }> | null>(null)
   const nextSegment = useRef(1)
   const elapsedSecondsRef = useRef(elapsedSeconds)
+  const partialTranscriptsRef = useRef(partialTranscripts)
+  const meetingTitleRef = useRef(meetingTitle)
+  const hasManualMeetingTitle = useRef(false)
+  const hasCapturedTabTitle = useRef(false)
+  const pendingSegmentWrites = useRef(new Set<Promise<void>>())
   useEffect(() => {
     api.me().then(setAccount).catch(cause => {
       if (cause instanceof ApiError && cause.code === 'TRIAL_EXPIRED') {
@@ -267,6 +277,17 @@ function HomePage() {
     else setTabAudioOn(listening)
   }
 
+  function setPartialTranscript(source: AudioSource, text: string) {
+    partialTranscriptsRef.current = { ...partialTranscriptsRef.current, [source]: text }
+    setPartialTranscripts(partialTranscriptsRef.current)
+  }
+
+  function setDisplayedMeetingTitle(title: string) {
+    meetingTitleRef.current = title
+    setMeetingTitle(title)
+    setMeetingTitleDraft(title)
+  }
+
   function releaseSource(source: AudioSource) {
     const capture = sourceCaptures.current[source]
     if (!capture) return false
@@ -274,7 +295,6 @@ function HomePage() {
     capture.connection.close()
     capture.stream.getTracks().forEach(track => track.stop())
     setSourceListening(source, false)
-    setPartialTranscripts(current => ({ ...current, [source]: '' }))
     return true
   }
 
@@ -282,32 +302,51 @@ function HomePage() {
     return sourceCaptures.current.microphone !== null || sourceCaptures.current.tab !== null
   }
 
-  async function endSessionIfUnused() {
+  async function abortSessionIfUnused() {
     if (hasActiveSources()) return
     const sessionId = callSessionId.current
     callSessionId.current = null
     setIsCallActive(false)
+    await waitForPendingSegments()
     if (sessionId) await api.endCall(sessionId).catch(() => setError('A captura foi encerrada localmente, mas não foi possível finalizar o histórico agora.'))
   }
 
   async function stopSource(source: AudioSource, message?: string) {
+    finalizePartialTranscript(source)
     if (!releaseSource(source)) return
     if (message) setError(message)
-    await endSessionIfUnused()
   }
 
   async function endCall() {
-    releaseSource('microphone')
-    releaseSource('tab')
-    await endSessionIfUnused()
+    await stopSource('microphone')
+    await stopSource('tab')
+    const sessionId = callSessionId.current
+    callSessionId.current = null
+    lastCallSessionId.current = sessionId
+    setIsCallActive(false)
+    await waitForPendingSegments()
+    if (sessionId) await api.endCall(sessionId).catch(() => setError('A captura foi encerrada localmente, mas não foi possível finalizar o histórico agora.'))
   }
 
   async function ensureSession() {
     if (callSessionId.current) return { sessionId: callSessionId.current, clientSecret: (await api.createTranscriptionSecret(callSessionId.current)).clientSecret }
-    if (!sessionStart.current) sessionStart.current = api.startCall()
+    if (!sessionStart.current) {
+      if (lastCallSessionId.current) {
+        lastCallSessionId.current = null
+        hasManualMeetingTitle.current = false
+        hasCapturedTabTitle.current = false
+        setDisplayedMeetingTitle(FALLBACK_MEETING_TITLE)
+        setLiveMessages([])
+        setPartialTranscript('microphone', '')
+        setPartialTranscript('tab', '')
+        nextSegment.current = 1
+      }
+      sessionStart.current = api.startCall(meetingTitleRef.current)
+    }
     try {
       const session = await sessionStart.current
       callSessionId.current = session.sessionId
+      setDisplayedMeetingTitle(session.title)
       setElapsedSeconds(0)
       return session
     } finally {
@@ -333,18 +372,69 @@ function HomePage() {
     try {
       const message = JSON.parse(payload) as { type?: string; delta?: string; transcript?: string }
       if (message.type === 'conversation.item.input_audio_transcription.delta') {
-        setPartialTranscripts(current => ({ ...current, [source]: current[source] + (message.delta ?? '') }))
+        setPartialTranscript(source, partialTranscriptsRef.current[source] + (message.delta ?? ''))
       }
       if (message.type === 'conversation.item.input_audio_transcription.completed' && message.transcript?.trim()) {
-        const text = message.transcript.trim()
-        const sequenceNumber = nextSegment.current++
-        const speaker = speakerForSource[source]
-        setLiveMessages(current => [...current, { speaker, time: formatDuration(elapsedSecondsRef.current), text, source }])
-        setPartialTranscripts(current => ({ ...current, [source]: '' }))
-        void api.saveTranscriptSegment(sessionId, sequenceNumber, text, apiSpeakerForSource(source)).catch(() => setError('A fala foi transcrita, mas não pôde ser salva no histórico.'))
+        finalizeTranscript(source, sessionId, message.transcript)
       }
     } catch {
       setError('A transcrição recebeu um evento inválido. Tente iniciar a fonte novamente.')
+    }
+  }
+
+  function finalizeTranscript(source: AudioSource, sessionId: string, rawText: string) {
+    const text = rawText.trim()
+    if (!text) return
+    const sequenceNumber = nextSegment.current++
+    const speaker = speakerForSource[source]
+    setLiveMessages(current => [...current, { speaker, time: formatDuration(elapsedSecondsRef.current), text, source }])
+    setPartialTranscript(source, '')
+    const write = api.saveTranscriptSegment(sessionId, sequenceNumber, text, apiSpeakerForSource(source))
+      .catch(() => setError('A fala foi transcrita, mas não pôde ser salva no histórico.'))
+    pendingSegmentWrites.current.add(write)
+    void write.finally(() => pendingSegmentWrites.current.delete(write))
+  }
+
+  async function waitForPendingSegments() {
+    await Promise.all([...pendingSegmentWrites.current])
+  }
+
+  function finalizePartialTranscript(source: AudioSource) {
+    const sessionId = callSessionId.current
+    if (sessionId) finalizeTranscript(source, sessionId, partialTranscriptsRef.current[source])
+  }
+
+  function tabTitleFrom(stream: MediaStream) {
+    const title = stream.getVideoTracks().map(track => track.label.trim()).find(Boolean)
+    return title && !/^screen\s+\d+$/i.test(title) ? title : null
+  }
+
+  function suggestFirstTabTitle(sessionId: string, title: string | null) {
+    if (!title || hasCapturedTabTitle.current || hasManualMeetingTitle.current) return
+    hasCapturedTabTitle.current = true
+    setDisplayedMeetingTitle(title)
+    void api.updateCallTitle(sessionId, title, true)
+      .then(response => { if (!hasManualMeetingTitle.current) setDisplayedMeetingTitle(response.title) })
+      .catch(() => setError('A call continua sendo transcrita, mas não foi possível salvar o título sugerido.'))
+  }
+
+  async function saveMeetingTitle(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const title = meetingTitleDraft.trim()
+    if (!title) { setError('Informe um título para a reunião.'); return }
+    const sessionId = callSessionId.current ?? lastCallSessionId.current
+    try {
+      if (sessionId) {
+        const response = await api.updateCallTitle(sessionId, title)
+        setDisplayedMeetingTitle(response.title)
+      } else {
+        setDisplayedMeetingTitle(title)
+      }
+      hasManualMeetingTitle.current = true
+      setEditingMeetingTitle(false)
+      setError(null)
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : 'Não foi possível salvar o título da reunião agora.')
     }
   }
 
@@ -379,7 +469,7 @@ function HomePage() {
     } catch (cause) {
       releaseSource('microphone')
       stream?.getTracks().forEach(track => track.stop())
-      await endSessionIfUnused()
+      await abortSessionIfUnused()
       setError(captureErrorMessage(cause, 'microphone'))
     }
   }
@@ -397,11 +487,12 @@ function HomePage() {
         return
       }
       const session = await ensureSession()
+      suggestFirstTabTitle(session.sessionId, tabTitleFrom(stream))
       await connectSource('tab', stream, session)
     } catch (cause) {
       releaseSource('tab')
       stream?.getTracks().forEach(track => track.stop())
-      await endSessionIfUnused()
+      await abortSessionIfUnused()
       setError(captureErrorMessage(cause, 'tab'))
     }
   }
@@ -424,7 +515,7 @@ function HomePage() {
   if (!account) return <div className="loading-page" role="status">{error ?? 'Carregando seu espaço…'}</div>
   const currentSuggestion = suggestions[0]
   const currentAnswer = currentSuggestion.answers[suggestionVersion]
-  const callStatus = !isCallActive ? 'Call encerrada' : microphoneOn && tabAudioOn ? 'Você e cliente sendo transcritos' : microphoneOn ? 'Microfone sendo transcrito' : 'Áudio da aba sendo transcrito'
+  const callStatus = !isCallActive ? 'Call encerrada' : microphoneOn && tabAudioOn ? 'Você e cliente sendo transcritos' : microphoneOn ? 'Microfone sendo transcrito' : tabAudioOn ? 'Áudio da aba sendo transcrito' : 'Call em pausa'
   const displayedTranscript = liveMessages
 
   return <div className="call-page">
@@ -435,6 +526,9 @@ function HomePage() {
         <span className={`live-status ${isCallActive ? 'is-live' : 'is-ended'}`}><span />{callStatus}</span>
         <span className="call-timer"><Icon name="clock" size={16} />{formatDuration(elapsedSeconds)}</span>
         <span className="context-divider" aria-hidden="true" />
+        <div className="meeting-title">
+          {editingMeetingTitle ? <form onSubmit={saveMeetingTitle}><label htmlFor="meeting-title">Título da reunião</label><input id="meeting-title" value={meetingTitleDraft} maxLength={160} onChange={event => setMeetingTitleDraft(event.target.value)} autoFocus /><button type="submit">Salvar</button></form> : <><span>Reunião</span><strong title={meetingTitle}>{meetingTitle}</strong><button type="button" onClick={() => { setMeetingTitleDraft(meetingTitle); setEditingMeetingTitle(true) }}>Editar título da reunião</button></>}
+        </div>
         <div className="client-identity"><span className="client-avatar">RC</span><span><strong>Rafaela Costa</strong><small>Diretora comercial · Orbit</small></span></div>
       </div>
       <div className="call-actions">

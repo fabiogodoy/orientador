@@ -121,6 +121,62 @@ describe('tela principal de call', () => {
     expect(stop).toHaveBeenCalled()
   })
 
+  it('mantém o trecho parcial e a reunião ativos ao pausar uma fonte', async () => {
+    const stop = vi.fn()
+    const track = { addEventListener: vi.fn(), stop }
+    const stream = { getTracks: () => [track], getAudioTracks: () => [track] } as unknown as MediaStream
+    let channel: { onmessage: ((event: MessageEvent) => void) | null } = { onmessage: null }
+    class TestPeerConnection {
+      addTrack = vi.fn()
+      close = vi.fn()
+      createDataChannel = vi.fn(() => channel)
+      createOffer = vi.fn().mockResolvedValue({ sdp: 'offer' })
+      setLocalDescription = vi.fn().mockResolvedValue(undefined)
+      setRemoteDescription = vi.fn().mockResolvedValue(undefined)
+    }
+    Object.defineProperty(window.navigator, 'mediaDevices', { configurable: true, writable: true, value: { getUserMedia: vi.fn().mockResolvedValue(stream) } })
+    Object.defineProperty(window, 'RTCPeerConnection', { configurable: true, writable: true, value: TestPeerConnection })
+    const fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/auth/me')) return Promise.resolve(new Response(JSON.stringify(account), { status: 200 }))
+      if (url.includes('/api/auth/csrf')) return Promise.resolve(new Response(JSON.stringify({ token: 'csrf-test' }), { status: 200 }))
+      if (url.endsWith('/api/calls')) return Promise.resolve(new Response(JSON.stringify({ sessionId: 'call-1', clientSecret: 'secret', title: 'Reunião sem título' }), { status: 200 }))
+      if (url.includes('api.openai.com')) return Promise.resolve(new Response('answer', { status: 200 }))
+      return Promise.resolve(new Response(null, { status: 204 }))
+    })
+    vi.stubGlobal('fetch', fetch)
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'A conversa, no ritmo da call.' })
+    fireEvent.click(screen.getByRole('button', { name: 'Escutar microfone' }))
+    await waitFor(() => expect(channel.onmessage).not.toBeNull())
+    channel.onmessage?.({ data: JSON.stringify({ type: 'conversation.item.input_audio_transcription.delta', delta: 'Trecho que estava sendo falado' }) } as MessageEvent)
+    expect(await screen.findByText('Trecho que estava sendo falado')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Parar de escutar microfone' }))
+    await waitFor(() => expect(screen.getByText('Trecho que estava sendo falado')).toBeInTheDocument())
+    expect(screen.getByText('Call em pausa')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Encerrar call' })).toBeInTheDocument()
+    expect(fetch.mock.calls.some(([input]) => String(input).includes('/segments'))).toBe(true)
+    expect(fetch.mock.calls.filter(([input]) => String(input).endsWith('/api/calls'))).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Encerrar call' }))
+    await screen.findByRole('button', { name: 'Iniciar call' })
+    const requestPaths = fetch.mock.calls.map(([input]) => String(input))
+    expect(requestPaths.findIndex(path => path.includes('/segments'))).toBeLessThan(requestPaths.findIndex(path => path.endsWith('/end')))
+  })
+
+  it('permite ajustar manualmente o título sugerido da reunião', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(account), { status: 200 })))
+    render(<App />)
+
+    await screen.findByRole('button', { name: 'Editar título da reunião' })
+    fireEvent.click(screen.getByRole('button', { name: 'Editar título da reunião' }))
+    fireEvent.change(screen.getByLabelText('Título da reunião'), { target: { value: 'Discovery · Grupo Aurora' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar' }))
+    expect(await screen.findByText('Discovery · Grupo Aurora')).toBeInTheDocument()
+  })
+
   it('troca a sugestão e expande uma orientação anterior localmente', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(account), { status: 200 })))
     render(<App />)

@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 
 @Service
 public class CallService {
+    static final String FALLBACK_TITLE = "Reunião sem título";
     private static final Logger log = LoggerFactory.getLogger(CallService.class);
     private final JdbcTemplate jdbc;
     private final AccountService accounts;
@@ -22,13 +23,28 @@ public class CallService {
     CallService(JdbcTemplate jdbc, AccountService accounts, OpenAiRealtimeClient realtime, Clock clock) { this.jdbc = jdbc; this.accounts = accounts; this.realtime = realtime; this.clock = clock; }
 
     @Transactional
-    CallSessionResponse start(UUID userId) {
+    CallSessionResponse start(UUID userId, String requestedTitle) {
         Identity identity = accounts.currentIdentity(userId);
         UUID id = UUID.randomUUID(); Instant now = clock.instant();
-        jdbc.update("insert into call_sessions (id, tenant_id, user_id, status, started_at) values (?, ?, ?, 'ACTIVE', ?)", id, identity.tenantId(), identity.id(), Timestamp.from(now));
-        CallSessionResponse response = new CallSessionResponse(id, realtime.createClientSecret(identity.id()));
+        String title = normalizeTitle(requestedTitle);
+        jdbc.update("insert into call_sessions (id, tenant_id, user_id, title, status, started_at) values (?, ?, ?, ?, 'ACTIVE', ?)", id, identity.tenantId(), identity.id(), title, Timestamp.from(now));
+        CallSessionResponse response = new CallSessionResponse(id, realtime.createClientSecret(identity.id()), title);
         log.info("Realtime transcription started callId={} tenantId={}", id, identity.tenantId());
         return response;
+    }
+
+    @Transactional
+    String updateTitle(UUID userId, UUID sessionId, String requestedTitle, boolean automatic) {
+        Identity identity = accounts.currentIdentity(userId);
+        String title = normalizeTitle(requestedTitle);
+        int updated = jdbc.update("update call_sessions set title=? where id=? and tenant_id=? and user_id=? and (?=false or title=?)", title, sessionId, identity.tenantId(), identity.id(), automatic, FALLBACK_TITLE);
+        if (updated == 1) {
+            log.info("Call title updated callId={} tenantId={}", sessionId, identity.tenantId());
+            return title;
+        }
+        String currentTitle = jdbc.query("select title from call_sessions where id=? and tenant_id=? and user_id=?", resultSet -> resultSet.next() ? resultSet.getString(1) : null, sessionId, identity.tenantId(), identity.id());
+        if (currentTitle == null) throw new CallNotFoundException();
+        return currentTitle;
     }
 
     TranscriptionSecretResponse createTranscriptionSecret(UUID userId, UUID sessionId) {
@@ -52,6 +68,12 @@ public class CallService {
         int updated = jdbc.update("update call_sessions set status='ENDED', ended_at=? where id=? and tenant_id=? and user_id=? and status='ACTIVE'", Timestamp.from(clock.instant()), sessionId, identity.tenantId(), identity.id());
         if (updated != 1) throw new CallNotFoundException();
         log.info("Realtime transcription ended callId={} tenantId={}", sessionId, identity.tenantId());
+    }
+
+    private static String normalizeTitle(String title) {
+        if (title == null) return FALLBACK_TITLE;
+        String normalized = title.trim();
+        return normalized.isEmpty() ? FALLBACK_TITLE : normalized;
     }
     public static class CallNotFoundException extends RuntimeException {}
 }

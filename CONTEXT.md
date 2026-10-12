@@ -25,7 +25,7 @@ Operador da Connectas com acesso administrativo a todos os tenants.
 _Evitar_: gestor, dono da organização
 
 **Reunião:**
-Sessão online acompanhada pelo Orientador a partir de uma aba do navegador e do microfone do usuário.
+Unidade de consulta que agrupa todos os segmentos de uma mesma conversa acompanhada pelo Orientador. Começa quando o usuário inicia uma call ou a primeira fonte de captura e termina somente quando ele a encerra explicitamente. Pausar ou retomar uma fonte não cria outra reunião.
 _Evitar_: gravação como sinônimo de reunião
 
 **Transcrição:**
@@ -45,15 +45,15 @@ Intervalo gratuito de sete dias concedido ao tenant quando ele é criado. Ao ter
 _Evitar_: assinatura ativa, pagamento ou prazo individual de cada membro
 
 **Sessão de call:**
-Intervalo iniciado e encerrado conscientemente pelo usuário autenticado para captar um fluxo de áudio autorizado.
-_Evitar_: gravação como sinônimo de sessão
+Registro técnico que representa uma reunião e mantém seu título, estado e segmentos. É encerrada explicitamente pelo usuário autenticado.
+_Evitar_: fonte de captura como sinônimo de sessão
 
 **Segmento de transcrição:**
 Trecho textual finalizado por detecção de fala dentro de uma sessão de call. É persistido; áudio bruto não é.
 _Evitar_: chunk de áudio
 
 **Transcrição parcial:**
-Texto transitório recebido enquanto a pessoa fala. Nunca é persistido como segmento final.
+Texto transitório recebido enquanto a pessoa fala. Quando uma fonte é parada antes do evento de conclusão do provedor, o texto recebido até então é finalizado como segmento interrompido para não desaparecer da reunião.
 _Evitar_: transcrição salva
 
 **Segredo efêmero:**
@@ -63,3 +63,7 @@ _Evitar_: chave OpenAI
 **Fonte de captura:**
 Origem independente de áudio dentro de uma sessão de call: microfone do usuário ou áudio compartilhado de aba/janela.
 _Evitar_: call como sinônimo de uma única fonte
+
+**Título da reunião:**
+Nome consultável atribuído à reunião. O primeiro título aproveitável da aba compartilhada é sugerido automaticamente; se não houver um, usa-se “Reunião sem título”. A pessoa sempre pode substituí-lo manualmente.
+_Evitar_: rótulo técnico da mídia como título definitivo

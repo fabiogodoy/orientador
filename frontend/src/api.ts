@@ -20,7 +20,7 @@ export type Registration = {
   termsAccepted: boolean
   termsVersion: string
 }
-export type CallSession = { sessionId: string; clientSecret: string }
+export type CallSession = { sessionId: string; clientSecret: string; title: string }
 export type TranscriptionSpeaker = 'USER' | 'CLIENT'
 
 const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.PROD
@@ -42,9 +42,9 @@ async function getCsrfToken(): Promise<string> {
   return csrfToken
 }
 
-async function request<T>(path: string, method: 'GET' | 'POST', body?: unknown): Promise<T> {
+async function request<T>(path: string, method: 'GET' | 'POST' | 'PATCH', body?: unknown): Promise<T> {
   const headers: Record<string, string> = {}
-  if (method === 'POST') {
+  if (method !== 'GET') {
     headers['Content-Type'] = 'application/json'
     headers['X-CSRF-TOKEN'] = await getCsrfToken()
   }
@@ -75,8 +75,9 @@ export const api = {
     await request<void>('/api/auth/logout', 'POST')
     csrfToken = null
   },
-  startCall: () => request<CallSession>('/api/calls', 'POST'),
+  startCall: (title: string) => request<CallSession>('/api/calls', 'POST', { title }),
   createTranscriptionSecret: (sessionId: string) => request<{ clientSecret: string }>(`/api/calls/${sessionId}/transcription-secret`, 'POST'),
   saveTranscriptSegment: (sessionId: string, sequenceNumber: number, text: string, speaker: TranscriptionSpeaker) => request<void>(`/api/calls/${sessionId}/segments`, 'POST', { sequenceNumber, text, speaker }),
+  updateCallTitle: (sessionId: string, title: string, automatic = false) => request<{ title: string }>(`/api/calls/${sessionId}/title`, 'PATCH', { title, automatic }),
   endCall: (sessionId: string) => request<void>(`/api/calls/${sessionId}/end`, 'POST'),
 }
