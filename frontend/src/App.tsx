@@ -187,11 +187,14 @@ function formatDuration(totalSeconds: number) {
 type AudioSource = 'microphone' | 'tab'
 type TranscriptSpeaker = 'you' | 'client'
 type SourceCapture = { stream: MediaStream; connection: RTCPeerConnection; stopTurnDetection: () => void }
+type ScrollPanel = 'transcript' | 'guidance'
+type SuggestionEntry = { segmentNumber: number; suggestion: CallSuggestion }
 type DisplayAudioOptions = DisplayMediaStreamOptions & { preferCurrentTab?: boolean; selfBrowserSurface?: 'exclude'; systemAudio?: 'include'; windowAudio?: 'system' }
 const FALLBACK_MEETING_TITLE = 'Reunião sem título'
 const TURN_DETECTION_INTERVAL_MS = 100
 const TURN_SILENCE_MS = 700
 const VOICE_RMS_THRESHOLD = 0.018
+const SCROLL_FOLLOW_THRESHOLD = 48
 
 class RealtimeConnectionError extends Error {
   constructor(readonly status: number) {
@@ -289,7 +292,7 @@ function HomePage() {
   const [microphoneOn, setMicrophoneOn] = useState(false)
   const [tabAudioOn, setTabAudioOn] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(1002)
-  const [suggestion, setSuggestion] = useState<CallSuggestion | null>(null)
+  const [suggestions, setSuggestions] = useState<SuggestionEntry[]>([])
   const [suggestionLoading, setSuggestionLoading] = useState(false)
   const [suggestionError, setSuggestionError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -300,6 +303,8 @@ function HomePage() {
   const [editingMeetingTitle, setEditingMeetingTitle] = useState(false)
   const [liveMessages, setLiveMessages] = useState<{ speaker: TranscriptSpeaker; time: string; text: string; source: AudioSource }[]>([])
   const [partialTranscripts, setPartialTranscripts] = useState<Record<AudioSource, string>>({ microphone: '', tab: '' })
+  const [scrollFollowing, setScrollFollowing] = useState<Record<ScrollPanel, boolean>>({ transcript: true, guidance: true })
+  const [expandedSuggestion, setExpandedSuggestion] = useState<number | null>(null)
   const sourceCaptures = useRef<Record<AudioSource, SourceCapture | null>>({ microphone: null, tab: null })
   const callSessionId = useRef<string | null>(null)
   const lastCallSessionId = useRef<string | null>(null)
@@ -313,6 +318,9 @@ function HomePage() {
   const pendingSegmentWrites = useRef(new Set<Promise<void>>())
   const latestClientSegment = useRef<number | null>(null)
   const suggestionRequest = useRef(0)
+  const transcriptScrollRef = useRef<HTMLDivElement>(null)
+  const guidanceScrollRef = useRef<HTMLDivElement>(null)
+  const scrollFollowingRef = useRef(scrollFollowing)
   useEffect(() => {
     api.me().then(setAccount).catch(cause => {
       if (cause instanceof ApiError && cause.code === 'TRIAL_EXPIRED') {
@@ -332,6 +340,11 @@ function HomePage() {
   }, [isCallActive])
 
   useEffect(() => { elapsedSecondsRef.current = elapsedSeconds }, [elapsedSeconds])
+  useEffect(() => { scrollFollowingRef.current = scrollFollowing }, [scrollFollowing])
+  useEffect(() => {
+    scrollToLatest('transcript', partialTranscripts.microphone || partialTranscripts.tab ? 'auto' : 'smooth')
+  }, [liveMessages, partialTranscripts])
+  useEffect(() => { scrollToLatest('guidance', 'smooth') }, [suggestions])
 
   async function logout() {
     try {
@@ -358,6 +371,30 @@ function HomePage() {
     setMeetingTitleDraft(title)
   }
 
+  function scrollElement(panel: ScrollPanel) {
+    return panel === 'transcript' ? transcriptScrollRef.current : guidanceScrollRef.current
+  }
+
+  function handlePanelScroll(panel: ScrollPanel) {
+    const element = scrollElement(panel)
+    if (!element) return
+    const following = element.scrollHeight - element.scrollTop - element.clientHeight <= SCROLL_FOLLOW_THRESHOLD
+    scrollFollowingRef.current = { ...scrollFollowingRef.current, [panel]: following }
+    setScrollFollowing(current => current[panel] === following ? current : { ...current, [panel]: following })
+  }
+
+  function scrollToLatest(panel: ScrollPanel, behavior: ScrollBehavior, force = false) {
+    if (!force && !scrollFollowingRef.current[panel]) return
+    const element = scrollElement(panel)
+    if (!element) return
+    if (force) {
+      scrollFollowingRef.current = { ...scrollFollowingRef.current, [panel]: true }
+      setScrollFollowing(current => ({ ...current, [panel]: true }))
+    }
+    if (typeof element.scrollTo === 'function') element.scrollTo({ top: element.scrollHeight, behavior })
+    else element.scrollTop = element.scrollHeight
+  }
+
   function releaseSource(source: AudioSource) {
     const capture = sourceCaptures.current[source]
     if (!capture) return false
@@ -379,7 +416,8 @@ function HomePage() {
     callSessionId.current = null
     latestClientSegment.current = null
     suggestionRequest.current += 1
-    setSuggestion(null)
+    setSuggestions([])
+    setExpandedSuggestion(null)
     setSuggestionLoading(false)
     setIsCallActive(false)
     await waitForPendingSegments()
@@ -399,7 +437,8 @@ function HomePage() {
     callSessionId.current = null
     latestClientSegment.current = null
     suggestionRequest.current += 1
-    setSuggestion(null)
+    setSuggestions([])
+    setExpandedSuggestion(null)
     setSuggestionLoading(false)
     lastCallSessionId.current = sessionId
     setIsCallActive(false)
@@ -416,7 +455,8 @@ function HomePage() {
         hasCapturedTabTitle.current = false
         setDisplayedMeetingTitle(FALLBACK_MEETING_TITLE)
         setLiveMessages([])
-        setSuggestion(null)
+        setSuggestions([])
+        setExpandedSuggestion(null)
         setSuggestionError(null)
         latestClientSegment.current = null
         setPartialTranscript('microphone', '')
@@ -496,7 +536,9 @@ function HomePage() {
     setSuggestionError(null)
     try {
       const response = await api.generateSuggestion(sessionId)
-      if (requestNumber === suggestionRequest.current && latestClientSegment.current === segmentNumber && callSessionId.current === sessionId) setSuggestion(response)
+      if (requestNumber === suggestionRequest.current && latestClientSegment.current === segmentNumber && callSessionId.current === sessionId) {
+        setSuggestions(current => [...current.filter(entry => entry.segmentNumber !== segmentNumber), { segmentNumber, suggestion: response }])
+      }
     } catch (cause) {
       if (requestNumber === suggestionRequest.current && latestClientSegment.current === segmentNumber && callSessionId.current === sessionId) {
         setSuggestionError(cause instanceof ApiError ? cause.message : 'Não foi possível gerar a sugestão agora. A transcrição continua normalmente.')
@@ -513,6 +555,7 @@ function HomePage() {
   }
 
   async function copySuggestion() {
+    const suggestion = suggestions.at(-1)?.suggestion
     if (!suggestion) return
     try {
       await navigator.clipboard?.writeText(suggestion.proximaFala)
@@ -698,6 +741,8 @@ function HomePage() {
   if (!account) return <div className="loading-page" role="status">{error ?? 'Carregando seu espaço…'}</div>
   const callStatus = !isCallActive ? 'Call encerrada' : microphoneOn && tabAudioOn ? 'Você e cliente sendo transcritos' : microphoneOn ? 'Microfone sendo transcrito' : tabAudioOn ? 'Áudio da aba sendo transcrito' : 'Call em pausa'
   const displayedTranscript = liveMessages
+  const currentSuggestion = suggestions.at(-1)?.suggestion ?? null
+  const previousSuggestions = suggestions.slice(0, -1)
   const avatarUrl = account.avatarUpdatedAt ? api.avatarUrl(account.avatarUpdatedAt) : null
   const accountContext = account.accountType === 'ORGANIZATION' ? `Gestor(a) · ${account.organizationName}` : 'Conta individual'
 
@@ -726,7 +771,7 @@ function HomePage() {
     <main className="call-workspace">
       <section className="workspace-panel transcript-panel" aria-labelledby="transcript-title">
         <header className="panel-header"><div><span className="panel-kicker"><Icon name="transcript" size={17} />Transcrição ao vivo</span><h1 id="transcript-title">A conversa, no ritmo da call.</h1></div></header>
-        <div className="transcript-scroll">
+        <div className="transcript-scroll" ref={transcriptScrollRef} onScroll={() => handlePanelScroll('transcript')}>
           <p className="call-start">Hoje · 09:30 <span>•</span> {isCallActive ? 'Transcrição em tempo real' : 'Aguardando início da call'}</p>
           {!displayedTranscript.length && !partialTranscripts.microphone && !partialTranscripts.tab && <p className="transcript-empty" role="status">Inicie o microfone ou compartilhe o áudio da aba. As falas transcritas aparecerão aqui.</p>}
           {displayedTranscript.map((message, index) => <article className={`message-row ${message.speaker === 'you' ? 'from-you' : 'from-client'}`} key={`${message.time}-${index}`}>
@@ -737,23 +782,26 @@ function HomePage() {
           {partialTranscripts.microphone && <article className="message-row from-you"><div className="message-content"><div className="message-meta"><strong>Você</strong><time>agora</time></div><p>{partialTranscripts.microphone}</p></div><span className="message-avatar you-avatar" aria-hidden="true">VO</span></article>}
           {partialTranscripts.tab && <article className="message-row from-client"><span className="message-avatar" aria-hidden="true">RC</span><div className="message-content"><div className="message-meta"><strong>Cliente</strong><time>agora</time></div><p>{partialTranscripts.tab}</p></div></article>}
           {isCallActive && <div className="typing-line"><span /><span /><span /> {microphoneOn && tabAudioOn ? 'Escutando você e o cliente…' : microphoneOn ? 'Escutando seu microfone…' : 'Escutando o áudio da aba…'}</div>}
+          {!scrollFollowing.transcript && <button type="button" className="scroll-latest-button" onClick={() => scrollToLatest('transcript', 'smooth', true)}>Voltar ao mais recente <span aria-hidden="true">↓</span></button>}
         </div>
         <footer className="panel-footer"><span><Icon name="sound" size={16} />{tabAudioOn ? 'Escutando áudio da aba' : 'Áudio da aba desativado'}</span><span>Português (Brasil)</span></footer>
       </section>
 
       <section className="workspace-panel guidance-panel" aria-labelledby="guidance-title">
         <header className="panel-header"><div><span className="panel-kicker ai-kicker"><Icon name="sparkles" size={17} />Orientação da IA</span><h2 id="guidance-title">Próxima melhor resposta</h2></div><span className="last-speech">Com base na última fala</span></header>
-        <div className="guidance-scroll">
-          {!suggestion && !suggestionLoading && !suggestionError && <p className="guidance-empty" role="status">Aguardando a primeira fala do cliente para orientar sua próxima resposta.</p>}
+        <div className="guidance-scroll" ref={guidanceScrollRef} onScroll={() => handlePanelScroll('guidance')}>
+          {!currentSuggestion && !suggestionLoading && !suggestionError && <p className="guidance-empty" role="status">Aguardando a primeira fala do cliente para orientar sua próxima resposta.</p>}
           {suggestionLoading && <p className="guidance-empty" role="status">Preparando uma sugestão para a última fala do cliente…</p>}
           {suggestionError && <div className="guidance-empty guidance-error" role="status"><p>{suggestionError}</p><button type="button" className="subtle-button" onClick={regenerateSuggestion}>Tentar novamente</button></div>}
-          {suggestion && !suggestionLoading && <article className="suggestion-card">
-            <div className="client-quote"><span aria-hidden="true">“</span><div><small>CLIENTE DISSE</small><p>{suggestion.trechoCliente}</p></div></div>
-            <div className="suggestion-topline"><span className="suggestion-tag">{suggestion.tipo}</span><span className="suggestion-context">Baseada na última fala</span></div>
-            <p className="suggested-response">{suggestion.proximaFala}</p>
-            <div className="key-points"><h3>O que vale manter na resposta</h3><ul>{suggestion.pontosChave.map(point => <li key={point}>{point}</li>)}</ul></div>
+          {!!previousSuggestions.length && <section className="previous-suggestions" aria-label="Sugestões anteriores"><header className="previous-heading"><h3>Sugestões anteriores</h3><span>{previousSuggestions.length}</span></header>{previousSuggestions.map(entry => <article className={`previous-card ${expandedSuggestion === entry.segmentNumber ? 'is-expanded' : ''}`} key={entry.segmentNumber}><button type="button" className="previous-trigger" aria-expanded={expandedSuggestion === entry.segmentNumber} onClick={() => setExpandedSuggestion(current => current === entry.segmentNumber ? null : entry.segmentNumber)}><span><b>{entry.suggestion.tipo}</b><small>{entry.suggestion.trechoCliente}</small></span><Icon name="chevron" size={16} /></button>{expandedSuggestion === entry.segmentNumber && <div className="previous-content"><q>{entry.suggestion.trechoCliente}</q><p>{entry.suggestion.proximaFala}</p></div>}</article>)}</section>}
+          {currentSuggestion && !suggestionLoading && <article className="suggestion-card">
+            <div className="client-quote"><span aria-hidden="true">“</span><div><small>CLIENTE DISSE</small><p>{currentSuggestion.trechoCliente}</p></div></div>
+            <div className="suggestion-topline"><span className="suggestion-tag">{currentSuggestion.tipo}</span><span className="suggestion-context">Baseada na última fala</span></div>
+            <p className="suggested-response">{currentSuggestion.proximaFala}</p>
+            <div className="key-points"><h3>O que vale manter na resposta</h3><ul>{currentSuggestion.pontosChave.map(point => <li key={point}>{point}</li>)}</ul></div>
             <footer className="suggestion-actions"><button type="button" className="subtle-button" onClick={() => void copySuggestion()}><Icon name="copy" size={16} />{copied ? 'Copiado' : 'Copiar resposta'}</button><button type="button" className="subtle-button" onClick={regenerateSuggestion}><Icon name="sparkles" size={16} />Gerar outra</button><small>Gerada agora</small></footer>
           </article>}
+          {!scrollFollowing.guidance && <button type="button" className="scroll-latest-button" onClick={() => scrollToLatest('guidance', 'smooth', true)}>Voltar ao mais recente <span aria-hidden="true">↓</span></button>}
         </div>
       </section>
     </main>

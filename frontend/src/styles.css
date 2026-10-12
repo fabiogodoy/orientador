@@ -152,6 +152,8 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .last-speech { padding-top: 7px; color: #94a6a9; font-size: .72rem; font-weight: 700; }
 .transcript-scroll, .guidance-scroll { min-height: 0; overflow: auto; scrollbar-color: #cae0da transparent; scrollbar-width: thin; }
 .transcript-scroll { flex: 1; padding: 22px 25px 30px; }
+.scroll-latest-button { position: sticky; bottom: 4px; display: flex; align-items: center; gap: 6px; margin: 10px 0 0 auto; padding: 8px 11px; border: 1px solid #a5ded0; border-radius: 999px; color: #187d6d; background: #f4fffb; box-shadow: 0 7px 18px #1b76621c; font-size: .72rem; font-weight: 800; }
+.scroll-latest-button:hover { color: #0d6558; background: #e6faf2; }
 .transcript-empty { margin: auto; max-width: 30rem; padding: 2rem; color: #789197; text-align: center; line-height: 1.55; }
 .call-start { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0 0 24px; color: #a2b0b1; font-size: .71rem; font-weight: 700; }
 .call-start::before, .call-start::after { flex: 1; height: 1px; content: ''; background: #e8efed; }

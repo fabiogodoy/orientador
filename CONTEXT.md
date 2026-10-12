@@ -40,6 +40,10 @@ _Evitar_: resposta obrigatória, decisão automática
 Sugestão produzida após uma fala final do cliente e exibida para uso imediato pelo vendedor; não compõe o histórico persistido da reunião.
 _Evitar_: resposta definitiva, registro de transcrição
 
+**Histórico de orientação da call:**
+Conjunto transitório de sugestões de fala geradas durante a call ativa. A mais recente recebe destaque e as anteriores permanecem consultáveis até o encerramento; não é persistido nem faz parte da transcrição.
+_Evitar_: histórico permanente de sugestões, transcrição
+
 **Conta de acesso:**
 Identidade de uma pessoa que entra no Orientador. Não é sinônimo de tenant: uma organização pode ter várias contas de acesso.
 _Evitar_: conta como sinônimo de organização ou espaço de dados

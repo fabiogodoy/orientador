@@ -261,6 +261,68 @@ describe('tela principal de call', () => {
     await waitFor(() => expect(audioContext.close).toHaveBeenCalled())
   })
 
+  it('oferece retorno ao fim sem mover quem está lendo a transcrição anterior', async () => {
+    const scrollTo = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'scrollTo', { configurable: true, value: scrollTo })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(account), { status: 200 })))
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'A conversa, no ritmo da call.' })
+    const transcript = document.querySelector('.transcript-scroll') as HTMLDivElement
+    Object.defineProperties(transcript, {
+      scrollHeight: { configurable: true, value: 600 },
+      clientHeight: { configurable: true, value: 200 },
+      scrollTop: { configurable: true, writable: true, value: 80 },
+    })
+    fireEvent.scroll(transcript)
+
+    const latest = screen.getByRole('button', { name: /Voltar ao mais recente/ })
+    fireEvent.click(latest)
+    expect(scrollTo).toHaveBeenCalledWith({ top: 600, behavior: 'smooth' })
+  })
+
+  it('mantém sugestões anteriores da call e destaca a mais recente', async () => {
+    const track = { addEventListener: vi.fn(), stop: vi.fn() }
+    const stream = { getTracks: () => [track], getAudioTracks: () => [track], getVideoTracks: () => [] } as unknown as MediaStream
+    const channel: { onmessage: ((event: MessageEvent) => void) | null; onopen: (() => void) | null; readyState: string; send: ReturnType<typeof vi.fn> } = { onmessage: null, onopen: null, readyState: 'connecting', send: vi.fn() }
+    class TestPeerConnection {
+      addTrack = vi.fn()
+      close = vi.fn()
+      createDataChannel = vi.fn(() => channel)
+      createOffer = vi.fn().mockResolvedValue({ sdp: 'offer' })
+      setLocalDescription = vi.fn().mockResolvedValue(undefined)
+      setRemoteDescription = vi.fn().mockResolvedValue(undefined)
+    }
+    let suggestions = 0
+    Object.defineProperty(window.navigator, 'mediaDevices', { configurable: true, writable: true, value: { getDisplayMedia: vi.fn().mockResolvedValue(stream) } })
+    Object.defineProperty(window, 'RTCPeerConnection', { configurable: true, writable: true, value: TestPeerConnection })
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/auth/me')) return Promise.resolve(new Response(JSON.stringify(account), { status: 200 }))
+      if (url.includes('/api/auth/csrf')) return Promise.resolve(new Response(JSON.stringify({ token: 'csrf-test' }), { status: 200 }))
+      if (url.endsWith('/api/calls')) return Promise.resolve(new Response(JSON.stringify({ sessionId: 'call-1', clientSecret: 'secret', title: 'Reunião sem título' }), { status: 200 }))
+      if (url.includes('/transcription-secret')) return Promise.resolve(new Response(JSON.stringify({ clientSecret: 'secret' }), { status: 200 }))
+      if (url.includes('/suggestions')) {
+        suggestions += 1
+        return Promise.resolve(new Response(JSON.stringify({ tipo: `Sugestão ${suggestions}`, trechoCliente: `Dúvida ${suggestions}`, proximaFala: `Resposta ${suggestions}`, pontosChave: ['Ouvir'] }), { status: 200 }))
+      }
+      if (url.includes('api.openai.com')) return Promise.resolve(new Response('answer', { status: 200 }))
+      return Promise.resolve(new Response(null, { status: 204 }))
+    }))
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'Próxima melhor resposta' })
+    fireEvent.click(screen.getByRole('button', { name: 'Escutar áudio da aba' }))
+    await waitFor(() => expect(channel.onmessage).not.toBeNull())
+    channel.onmessage?.({ data: JSON.stringify({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'Dúvida um' }) } as MessageEvent)
+    expect(await screen.findByText('Resposta 1')).toBeInTheDocument()
+    channel.onmessage?.({ data: JSON.stringify({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'Dúvida dois' }) } as MessageEvent)
+    expect(await screen.findByText('Resposta 2')).toBeInTheDocument()
+    expect(screen.getByText('Sugestões anteriores')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Sugestão 1/ }))
+    expect(screen.getByText('Resposta 1')).toBeInTheDocument()
+  })
+
   it('usa a identidade da conta e permite editar o nome pelo perfil', async () => {
     const renamed = { ...account, name: 'Vanessa Costa' }
     const fetch = vi.fn((input: RequestInfo | URL) => {
