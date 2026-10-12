@@ -83,4 +83,21 @@ test('tela da call alterna controles e adapta o layout sem depender da API real'
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await expect(page.getByText('Aguardando a primeira fala do cliente para orientar sua próxima resposta.')).toBeVisible()
   await page.screenshot({ path: testInfo.outputPath('tela-call-mobile.png'), fullPage: true })
+  await page.route('**/api/calls?page=0', route => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ page: 0, pageSize: 20, total: 1, items: [
+      { sessionId: 'meeting-1', title: 'Discovery Orbit', startedAt: '2026-10-12T13:00:00Z', endedAt: '2026-10-12T13:42:00Z', durationSeconds: 2520, ownerId: 'visual-test', ownerName: 'Pessoa Teste' },
+    ] }),
+  }))
+  await page.route('**/api/calls/meeting-1', route => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({ sessionId: 'meeting-1', title: 'Discovery Orbit', startedAt: '2026-10-12T13:00:00Z', endedAt: '2026-10-12T13:42:00Z', durationSeconds: 2520, ownerId: 'visual-test', ownerName: 'Pessoa Teste', segments: [
+      { sequenceNumber: 1, speaker: 'USER', text: 'Olá, obrigado pelo tempo.', finalizedAt: '2026-10-12T13:01:00Z' },
+      { sequenceNumber: 2, speaker: 'CLIENT', text: 'Quero entender o processo.', finalizedAt: '2026-10-12T13:02:00Z' },
+    ] }),
+  }))
+  await page.getByRole('link', { name: 'Reuniões' }).click()
+  await expect(page).toHaveURL(/\/app\/reunioes$/)
+  await expect(page.getByRole('heading', { name: 'Reuniões realizadas' })).toBeVisible()
+  await page.getByRole('link', { name: /Discovery Orbit/ }).click()
+  await expect(page.getByRole('heading', { name: 'Discovery Orbit' })).toBeVisible()
+  await expect(page.getByText('Quero entender o processo.')).toBeVisible()
 })

@@ -346,3 +346,47 @@ describe('tela principal de call', () => {
     expect(fetch.mock.calls.some(([input]) => String(input).includes('/api/profile'))).toBe(true)
   })
 })
+
+describe('histórico de reuniões', () => {
+  const account = {
+    id: 'user-1', name: 'Vanessa Oliveira', email: 'vanessa@example.com', role: 'ORGANIZATION_MANAGER' as const,
+    accountType: 'ORGANIZATION' as const, organizationName: 'Orbit', trialEndsAt: '2026-10-18T12:00:00Z', avatarUpdatedAt: null,
+  }
+
+  it('lista reuniões encerradas, pagina e informa a responsável quando necessário', async () => {
+    window.history.replaceState({}, '', '/app/reunioes')
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/auth/me')) return Promise.resolve(new Response(JSON.stringify(account), { status: 200 }))
+      return Promise.resolve(new Response(JSON.stringify({ page: 0, pageSize: 20, total: 21, items: [
+        { sessionId: 'meeting-1', title: 'Discovery Orbit', startedAt: '2026-10-12T13:00:00Z', endedAt: '2026-10-12T13:42:00Z', durationSeconds: 2520, ownerId: 'user-1', ownerName: 'Vanessa Oliveira' },
+        { sessionId: 'meeting-2', title: 'Revisão comercial', startedAt: '2026-10-11T13:00:00Z', endedAt: '2026-10-11T13:20:00Z', durationSeconds: 1200, ownerId: 'user-2', ownerName: 'Rafael Costa' },
+      ] }), { status: 200 }))
+    }))
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Reuniões realizadas' })).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: /Discovery Orbit/ })).toHaveAttribute('href', '/app/reunioes/meeting-1')
+    expect(screen.getByText('Realizada por Rafael Costa')).toBeInTheDocument()
+    expect(screen.getByText('Página 1 de 2')).toBeInTheDocument()
+  })
+
+  it('mostra o detalhe somente leitura com a transcrição cronológica', async () => {
+    window.history.replaceState({}, '', '/app/reunioes/meeting-1')
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/auth/me')) return Promise.resolve(new Response(JSON.stringify(account), { status: 200 }))
+      return Promise.resolve(new Response(JSON.stringify({ sessionId: 'meeting-1', title: 'Discovery Orbit', startedAt: '2026-10-12T13:00:00Z', endedAt: '2026-10-12T13:42:00Z', durationSeconds: 2520, ownerId: 'user-2', ownerName: 'Rafael Costa', segments: [
+        { sequenceNumber: 1, speaker: 'USER', text: 'Olá, obrigado pelo tempo.', finalizedAt: '2026-10-12T13:01:00Z' },
+        { sequenceNumber: 2, speaker: 'CLIENT', text: 'Quero entender o processo.', finalizedAt: '2026-10-12T13:02:00Z' },
+      ] }), { status: 200 }))
+    }))
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Discovery Orbit' })).toBeInTheDocument()
+    expect(screen.getByText('Olá, obrigado pelo tempo.')).toBeInTheDocument()
+    expect(screen.getByText('Quero entender o processo.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Escutar microfone' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Sugerir agora')).not.toBeInTheDocument()
+  })
+})

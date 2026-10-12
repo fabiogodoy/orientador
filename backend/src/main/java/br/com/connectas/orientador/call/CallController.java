@@ -16,6 +16,14 @@ class CallController {
     CallSessionResponse start(Authentication auth, @Valid @RequestBody(required = false) CallStartRequest request) {
         return calls.start(((SessionPrincipal) auth.getPrincipal()).userId(), request == null ? null : request.title());
     }
+    @GetMapping
+    CallHistoryPage history(Authentication auth, @RequestParam(defaultValue = "0") int page) {
+        return calls.history(((SessionPrincipal) auth.getPrincipal()).userId(), page);
+    }
+    @GetMapping("/{sessionId}")
+    CallHistoryDetail detail(Authentication auth, @PathVariable UUID sessionId) {
+        return calls.detail(((SessionPrincipal) auth.getPrincipal()).userId(), sessionId);
+    }
     @PostMapping("/{sessionId}/transcription-secret")
     TranscriptionSecretResponse transcriptionSecret(Authentication auth, @PathVariable UUID sessionId) { return calls.createTranscriptionSecret(((SessionPrincipal) auth.getPrincipal()).userId(), sessionId); }
     @PostMapping("/{sessionId}/segments") @ResponseStatus(HttpStatus.NO_CONTENT)

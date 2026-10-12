@@ -83,3 +83,7 @@ _Evitar_: call como sinônimo de uma única fonte
 **Título da reunião:**
 Nome consultável atribuído à reunião. O primeiro título aproveitável da aba compartilhada é sugerido automaticamente; se não houver um, usa-se “Reunião sem título”. A pessoa sempre pode substituí-lo manualmente.
 _Evitar_: rótulo técnico da mídia como título definitivo
+
+**Consulta de reuniões:**
+Área somente leitura que permite localizar uma reunião encerrada e consultar seus metadados e transcrição conforme a permissão do perfil autenticado.
+_Evitar_: gravação, painel de call ativa

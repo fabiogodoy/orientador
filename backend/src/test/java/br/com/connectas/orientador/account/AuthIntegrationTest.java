@@ -242,6 +242,53 @@ class AuthIntegrationTest {
         assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM transcript_segments WHERE call_session_id=?", Integer.class, callId));
     }
 
+    @Test
+    void historyShowsOnlyEndedCallsWithinTheAuthorizedScope() throws Exception {
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE version='06'", Integer.class));
+        String managerEmail = uniqueEmail();
+        String outsiderEmail = uniqueEmail();
+        register(managerEmail, "ORGANIZATION", "Equipe Aurora", true, AccountService.TERMS_VERSION);
+        register(outsiderEmail, "INDIVIDUAL", null, true, AccountService.TERMS_VERSION);
+        UUID managerId = jdbc.queryForObject("SELECT id FROM users WHERE email=?", UUID.class, managerEmail);
+        UUID organizationTenant = jdbc.queryForObject("SELECT tenant_id FROM users WHERE email=?", UUID.class, managerEmail);
+        UUID outsiderId = jdbc.queryForObject("SELECT id FROM users WHERE email=?", UUID.class, outsiderEmail);
+        UUID outsiderTenant = jdbc.queryForObject("SELECT tenant_id FROM users WHERE email=?", UUID.class, outsiderEmail);
+        UUID memberId = UUID.randomUUID();
+        jdbc.update("INSERT INTO users (id, tenant_id, name, email, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, 'ORGANIZATION_MEMBER', ?)", memberId, organizationTenant, "Membro Aurora", uniqueEmail(), "{bcrypt}unused", Timestamp.from(START));
+        UUID managerCall = endedCall(managerId, organizationTenant, "Reunião do gestor", START.plusSeconds(60));
+        UUID memberCall = endedCall(memberId, organizationTenant, "Reunião do membro", START.plusSeconds(120));
+        UUID outsiderCall = endedCall(outsiderId, outsiderTenant, "Reunião externa", START.plusSeconds(180));
+        jdbc.update("INSERT INTO call_sessions (id, tenant_id, user_id, title, status, started_at) VALUES (?, ?, ?, ?, 'ACTIVE', ?)", UUID.randomUUID(), organizationTenant, managerId, "Call ativa", Timestamp.from(START));
+        jdbc.update("INSERT INTO transcript_segments (id, call_session_id, tenant_id, sequence_number, text, speaker, finalized_at, created_at) VALUES (?, ?, ?, 1, 'Trecho autorizado', 'CLIENT', ?, ?)", UUID.randomUUID(), memberCall, organizationTenant, Timestamp.from(START), Timestamp.from(START));
+
+        assertEquals(200, post("/api/auth/login", loginJson(managerEmail)).statusCode());
+        String managerHistory = send("GET", "/api/calls?page=0", null, null).body();
+        assertTrue(managerHistory.contains("Reunião do gestor"));
+        assertTrue(managerHistory.contains("Reunião do membro"));
+        assertFalse(managerHistory.contains("Reunião externa"));
+        assertFalse(managerHistory.contains("Call ativa"));
+        assertEquals(200, send("GET", "/api/calls/" + memberCall, null, null).statusCode());
+        assertEquals(404, send("GET", "/api/calls/" + outsiderCall, null, null).statusCode());
+
+        for (int index = 0; index < 19; index++) {
+            endedCall(managerId, organizationTenant, "Reunião paginada " + index, START.plusSeconds(300L + index));
+        }
+        String firstPage = send("GET", "/api/calls?page=0", null, null).body();
+        assertEquals(20, firstPage.split("\\\"sessionId\\\"", -1).length - 1);
+        assertTrue(send("GET", "/api/calls?page=1", null, null).body().contains("Reunião do gestor"));
+
+        jdbc.update("UPDATE users SET role='PLATFORM_ADMIN' WHERE id=?", managerId);
+        assertTrue(send("GET", "/api/calls?page=0", null, null).body().contains("Reunião externa"));
+        assertEquals(200, send("GET", "/api/calls/" + outsiderCall, null, null).statusCode());
+        assertFalse(send("GET", "/api/calls/" + managerCall, null, null).body().contains("Trecho autorizado"));
+    }
+
+    private UUID endedCall(UUID userId, UUID tenantId, String title, Instant startedAt) {
+        UUID callId = UUID.randomUUID();
+        jdbc.update("INSERT INTO call_sessions (id, tenant_id, user_id, title, status, started_at, ended_at) VALUES (?, ?, ?, ?, 'ENDED', ?, ?)", callId, tenantId, userId, title, Timestamp.from(startedAt), Timestamp.from(startedAt.plusSeconds(600)));
+        return callId;
+    }
+
     private HttpResponse<String> register(String email, String type, String organization, boolean accepted, String version) throws Exception {
         return post("/api/auth/register", registrationJson(email, type, organization, accepted, version));
     }

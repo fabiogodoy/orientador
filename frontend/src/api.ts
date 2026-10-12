@@ -5,7 +5,7 @@ export type Account = {
   id: string
   name: string
   email: string
-  role: 'INDIVIDUAL' | 'ORGANIZATION_MANAGER'
+  role: 'INDIVIDUAL' | 'ORGANIZATION_MANAGER' | 'ORGANIZATION_MEMBER' | 'PLATFORM_ADMIN'
   accountType: AccountType
   organizationName: string | null
   trialEndsAt: string
@@ -24,6 +24,10 @@ export type Registration = {
 export type CallSession = { sessionId: string; clientSecret: string; title: string }
 export type TranscriptionSpeaker = 'USER' | 'CLIENT'
 export type CallSuggestion = { tipo: string; trechoCliente: string; proximaFala: string; pontosChave: string[] }
+export type CallHistoryItem = { sessionId: string; title: string; startedAt: string; endedAt: string; durationSeconds: number; ownerId: string; ownerName: string }
+export type CallHistoryPage = { items: CallHistoryItem[]; page: number; pageSize: number; total: number }
+export type TranscriptHistorySegment = { sequenceNumber: number; speaker: TranscriptionSpeaker; text: string; finalizedAt: string }
+export type CallHistoryDetail = CallHistoryItem & { segments: TranscriptHistorySegment[] }
 
 const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.PROD
   ? 'https://api-orientador.connectas.com.br' : 'http://localhost:8080')
@@ -101,6 +105,8 @@ export const api = {
     csrfToken = null
   },
   startCall: (title: string) => request<CallSession>('/api/calls', 'POST', { title }),
+  callHistory: (page: number) => request<CallHistoryPage>(`/api/calls?page=${page}`, 'GET'),
+  callHistoryDetail: (sessionId: string) => request<CallHistoryDetail>(`/api/calls/${sessionId}`, 'GET'),
   createTranscriptionSecret: (sessionId: string) => request<{ clientSecret: string }>(`/api/calls/${sessionId}/transcription-secret`, 'POST'),
   saveTranscriptSegment: (sessionId: string, sequenceNumber: number, text: string, speaker: TranscriptionSpeaker) => request<void>(`/api/calls/${sessionId}/segments`, 'POST', { sequenceNumber, text, speaker }),
   generateSuggestion: (sessionId: string) => request<CallSuggestion>(`/api/calls/${sessionId}/suggestions`, 'POST'),

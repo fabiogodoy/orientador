@@ -3,13 +3,14 @@ import ReactMarkdown from 'react-markdown'
 import logoUrl from '../../assets/brand/orientador-logo.svg'
 import logoLightUrl from '../../assets/brand/orientador-logo-light.svg'
 import termsMarkdown from '../../docs/legal/termos-de-uso.md?raw'
-import { api, ApiError, TERMS_VERSION, type Account, type AccountType, type CallSuggestion } from './api'
+import { api, ApiError, TERMS_VERSION, type Account, type AccountType, type CallHistoryDetail, type CallHistoryItem, type CallHistoryPage, type CallSuggestion } from './api'
 
 const routes = {
   home: '/app/',
   login: '/app/login',
   register: '/app/cadastro',
   terms: '/app/termos',
+  meetings: '/app/reunioes',
 }
 
 function Brand({ light = false }: { light?: boolean }) {
@@ -182,6 +183,10 @@ function formatDuration(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0')
   const seconds = (totalSeconds % 60).toString().padStart(2, '0')
   return `${minutes}:${seconds}`
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }
 
 type AudioSource = 'microphone' | 'tab'
@@ -760,6 +765,7 @@ function HomePage() {
         <button type="button" className="client-identity" onClick={() => setProfileOpen(true)} aria-label="Abrir seu perfil"><span className="client-avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : initials(account.name)}</span><span><strong>{account.name}</strong><small>{accountContext}</small></span></button>
       </div>
       <div className="call-actions">
+        <a className="history-link" href={routes.meetings}><Icon name="transcript" size={17} />Reuniões</a>
         <button type="button" className={`icon-control ${microphoneOn ? 'is-on' : ''}`} aria-label={microphoneOn ? 'Parar de escutar microfone' : 'Escutar microfone'} aria-pressed={microphoneOn} onClick={() => void toggleMicrophone()}><Icon name="microphone" /></button>
         <button type="button" className={`icon-control ${tabAudioOn ? 'is-on' : ''}`} aria-label={tabAudioOn ? 'Parar de escutar áudio da aba' : 'Escutar áudio da aba'} aria-pressed={tabAudioOn} onClick={() => void toggleTabAudio()}><Icon name="tabAudio" /></button>
         <button type="button" className="suggest-button" disabled={!latestClientSegment.current || suggestionLoading} onClick={regenerateSuggestion}><Icon name="sparkles" />Sugerir agora</button>
@@ -810,10 +816,62 @@ function HomePage() {
   </div>
 }
 
+function HistoryHeader({ account }: { account: Account }) {
+  return <header className="history-topbar">
+    <a className="call-brand" href={routes.home} aria-label="Orientador — tela da call"><img src={logoUrl} alt="Orientador" /></a>
+    <nav aria-label="Navegação principal"><a href={routes.home}>Call atual</a><a href={routes.meetings} aria-current="page">Reuniões</a></nav>
+    <span className="history-account">{account.name}</span>
+  </header>
+}
+
+function MeetingHistoryPage() {
+  const [account, setAccount] = useState<Account | null>(null)
+  const [history, setHistory] = useState<CallHistoryPage | null>(null)
+  const [page, setPage] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => { api.me().then(setAccount).catch(() => window.location.replace(routes.login)) }, [])
+  useEffect(() => {
+    if (!account) return
+    setHistory(null); setError(null)
+    api.callHistory(page).then(setHistory).catch(cause => setError(cause instanceof ApiError ? cause.message : 'Não foi possível carregar suas reuniões.'))
+  }, [account, page])
+  if (!account) return <div className="loading-page" role="status">Carregando suas reuniões…</div>
+  const totalPages = history ? Math.ceil(history.total / history.pageSize) : 0
+  return <div className="history-page"><HistoryHeader account={account} /><main className="history-main"><span className="eyebrow">HISTÓRICO</span><h1>Reuniões realizadas</h1><p className="history-lead">Consulte as reuniões encerradas e retome o contexto da conversa quando precisar.</p><ErrorNotice message={error} />
+    {!history && !error && <p className="history-state" role="status">Carregando reuniões…</p>}
+    {history?.items.length === 0 && <p className="history-state">Ainda não há reuniões encerradas para consultar.</p>}
+    {history?.items.map(item => <MeetingRow key={item.sessionId} item={item} account={account} />)}
+    {history && totalPages > 1 && <nav className="history-pagination" aria-label="Paginação de reuniões"><button type="button" disabled={page === 0} onClick={() => setPage(current => current - 1)}>Anterior</button><span>Página {page + 1} de {totalPages}</span><button type="button" disabled={page + 1 >= totalPages} onClick={() => setPage(current => current + 1)}>Próxima</button></nav>}
+  </main></div>
+}
+
+function MeetingRow({ item, account }: { item: CallHistoryItem; account: Account }) {
+  return <a className="meeting-row" href={`${routes.meetings}/${item.sessionId}`}><span className="meeting-row-mark"><Icon name="transcript" size={19} /></span><span className="meeting-row-copy"><strong>{item.title}</strong><small>{formatDateTime(item.startedAt)} · {formatDuration(item.durationSeconds)}</small>{item.ownerId !== account.id && <em>Realizada por {item.ownerName}</em>}</span><span aria-hidden="true">→</span></a>
+}
+
+function MeetingDetailPage({ sessionId }: { sessionId: string }) {
+  const [account, setAccount] = useState<Account | null>(null)
+  const [meeting, setMeeting] = useState<CallHistoryDetail | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => { api.me().then(setAccount).catch(() => window.location.replace(routes.login)) }, [])
+  useEffect(() => {
+    if (!account) return
+    api.callHistoryDetail(sessionId).then(setMeeting).catch(() => setError('Esta reunião não está disponível.'))
+  }, [account, sessionId])
+  if (!account) return <div className="loading-page" role="status">Carregando reunião…</div>
+  return <div className="history-page"><HistoryHeader account={account} /><main className="history-main detail-main"><a className="back-link" href={routes.meetings}>← Todas as reuniões</a><ErrorNotice message={error} />
+    {!meeting && !error && <p className="history-state" role="status">Carregando transcrição…</p>}
+    {meeting && <><span className="eyebrow">REUNIÃO ENCERRADA</span><h1>{meeting.title}</h1><div className="meeting-meta"><span>{formatDateTime(meeting.startedAt)}</span><span>{formatDuration(meeting.durationSeconds)}</span>{meeting.ownerId !== account.id && <span>Realizada por {meeting.ownerName}</span>}</div><section className="history-transcript" aria-labelledby="history-transcript-title"><header><span className="panel-kicker"><Icon name="transcript" size={17} />Transcrição</span><h2 id="history-transcript-title">A conversa registrada</h2></header>{meeting.segments.length === 0 ? <p className="history-state">Esta reunião foi encerrada sem transcrição final.</p> : meeting.segments.map(segment => <article className={`history-segment ${segment.speaker === 'USER' ? 'from-user' : 'from-client'}`} key={segment.sequenceNumber}><small>{segment.speaker === 'USER' ? meeting.ownerName : 'Cliente'} · {formatDateTime(segment.finalizedAt)}</small><p>{segment.text}</p></article>)}</section></>}
+  </main></div>
+}
+
 export function App() {
   const path = window.location.pathname.replace(/\/$/, '')
   if (path === routes.terms) return <TermsPage />
   if (path === routes.register) return <RegisterPage />
   if (path === routes.login) return <LoginPage />
+  if (path === routes.meetings) return <MeetingHistoryPage />
+  const meetingDetail = path.match(/^\/app\/reunioes\/([^/]+)$/)
+  if (meetingDetail) return <MeetingDetailPage sessionId={meetingDetail[1]} />
   return <HomePage />
 }
