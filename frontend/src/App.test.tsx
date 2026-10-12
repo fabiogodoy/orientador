@@ -76,7 +76,7 @@ describe('tela principal de call', () => {
 
     expect(await screen.findByRole('heading', { name: 'A conversa, no ritmo da call.' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Próxima melhor resposta' })).toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('As falas transcritas aparecerão aqui.')
+    expect(screen.getByText('Inicie o microfone ou compartilhe o áudio da aba. As falas transcritas aparecerão aqui.')).toBeInTheDocument()
     expect(screen.queryByText('A gente está crescendo rápido e eu sinto que cada vendedor conduz as calls de um jeito.')).not.toBeInTheDocument()
     expect(screen.getByText(/Microfone e áudio compartilhado são transcritos de forma independente/)).toBeInTheDocument()
 
@@ -125,7 +125,7 @@ describe('tela principal de call', () => {
     const stop = vi.fn()
     const track = { addEventListener: vi.fn(), stop }
     const stream = { getTracks: () => [track], getAudioTracks: () => [track] } as unknown as MediaStream
-    let channel: { onmessage: ((event: MessageEvent) => void) | null } = { onmessage: null }
+    const channel: { onmessage: ((event: MessageEvent) => void) | null; onopen: (() => void) | null; readyState: string; send: ReturnType<typeof vi.fn> } = { onmessage: null, onopen: null, readyState: 'connecting', send: vi.fn() }
     class TestPeerConnection {
       addTrack = vi.fn()
       close = vi.fn()
@@ -177,15 +177,87 @@ describe('tela principal de call', () => {
     expect(await screen.findByText('Discovery · Grupo Aurora')).toBeInTheDocument()
   })
 
-  it('troca a sugestão e expande uma orientação anterior localmente', async () => {
+  it('aguarda uma fala do cliente em vez de mostrar sugestões demonstrativas', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(account), { status: 200 })))
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Próxima melhor resposta' })
-    fireEvent.click(screen.getByRole('button', { name: 'Gerar outra' }))
-    expect(screen.getByText(/Antes de comparar apenas o valor/)).toBeInTheDocument()
+    expect(screen.getByText('Aguardando a primeira fala do cliente para orientar sua próxima resposta.')).toBeInTheDocument()
+    expect(screen.queryByText(/Antes de comparar apenas o valor/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sugerir agora' })).toBeDisabled()
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: /Aprofundar a dor/ }))
-    await waitFor(() => expect(screen.getByText(/Quando isso acontece, o que normalmente se perde primeiro/)).toBeInTheDocument())
+  it('mostra uma falha segura quando a transcrição rejeita uma fala', async () => {
+    const track = { addEventListener: vi.fn(), stop: vi.fn() }
+    const stream = { getTracks: () => [track], getAudioTracks: () => [track] } as unknown as MediaStream
+    const channel: { onmessage: ((event: MessageEvent) => void) | null; onopen: (() => void) | null; readyState: string; send: ReturnType<typeof vi.fn> } = { onmessage: null, onopen: null, readyState: 'connecting', send: vi.fn() }
+    class TestPeerConnection {
+      addTrack = vi.fn()
+      close = vi.fn()
+      createDataChannel = vi.fn(() => channel)
+      createOffer = vi.fn().mockResolvedValue({ sdp: 'offer' })
+      setLocalDescription = vi.fn().mockResolvedValue(undefined)
+      setRemoteDescription = vi.fn().mockResolvedValue(undefined)
+    }
+    Object.defineProperty(window.navigator, 'mediaDevices', { configurable: true, writable: true, value: { getUserMedia: vi.fn().mockResolvedValue(stream) } })
+    Object.defineProperty(window, 'RTCPeerConnection', { configurable: true, writable: true, value: TestPeerConnection })
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/auth/me')) return Promise.resolve(new Response(JSON.stringify(account), { status: 200 }))
+      if (url.includes('/api/auth/csrf')) return Promise.resolve(new Response(JSON.stringify({ token: 'csrf-test' }), { status: 200 }))
+      if (url.endsWith('/api/calls')) return Promise.resolve(new Response(JSON.stringify({ sessionId: 'call-1', clientSecret: 'secret', title: 'Reunião sem título' }), { status: 200 }))
+      if (url.includes('api.openai.com')) return Promise.resolve(new Response('answer', { status: 200 }))
+      return Promise.resolve(new Response(null, { status: 204 }))
+    }))
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'A conversa, no ritmo da call.' })
+    fireEvent.click(screen.getByRole('button', { name: 'Escutar microfone' }))
+    await waitFor(() => expect(channel.onmessage).not.toBeNull())
+    channel.onmessage?.({ data: JSON.stringify({ type: 'conversation.item.input_audio_transcription.failed' }) } as MessageEvent)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível transcrever esta fala')
+    expect(channel.send).not.toHaveBeenCalled()
+  })
+
+  it('confirma o turno depois de uma fala seguida de silêncio', async () => {
+    const track = { addEventListener: vi.fn(), stop: vi.fn() }
+    const stream = { getTracks: () => [track], getAudioTracks: () => [track] } as unknown as MediaStream
+    const channel: { onmessage: ((event: MessageEvent) => void) | null; onopen: (() => void) | null; readyState: string; send: ReturnType<typeof vi.fn> } = { onmessage: null, onopen: null, readyState: 'open', send: vi.fn() }
+    let sample = 160
+    const analyser = { fftSize: 0, getByteTimeDomainData: vi.fn((samples: Uint8Array) => samples.fill(sample)), disconnect: vi.fn() }
+    const audioSource = { connect: vi.fn(), disconnect: vi.fn() }
+    const audioContext = { createAnalyser: () => analyser, createMediaStreamSource: () => audioSource, resume: vi.fn().mockResolvedValue(undefined), close: vi.fn().mockResolvedValue(undefined) }
+    Object.defineProperty(window, 'AudioContext', { configurable: true, writable: true, value: class { constructor() { return audioContext } } })
+    class TestPeerConnection {
+      addTrack = vi.fn()
+      close = vi.fn()
+      createDataChannel = vi.fn(() => channel)
+      createOffer = vi.fn().mockResolvedValue({ sdp: 'offer' })
+      setLocalDescription = vi.fn().mockResolvedValue(undefined)
+      setRemoteDescription = vi.fn().mockResolvedValue(undefined)
+    }
+    Object.defineProperty(window.navigator, 'mediaDevices', { configurable: true, writable: true, value: { getUserMedia: vi.fn().mockResolvedValue(stream) } })
+    Object.defineProperty(window, 'RTCPeerConnection', { configurable: true, writable: true, value: TestPeerConnection })
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/auth/me')) return Promise.resolve(new Response(JSON.stringify(account), { status: 200 }))
+      if (url.includes('/api/auth/csrf')) return Promise.resolve(new Response(JSON.stringify({ token: 'csrf-test' }), { status: 200 }))
+      if (url.endsWith('/api/calls')) return Promise.resolve(new Response(JSON.stringify({ sessionId: 'call-1', clientSecret: 'secret', title: 'Reunião sem título' }), { status: 200 }))
+      if (url.includes('api.openai.com')) return Promise.resolve(new Response('answer', { status: 200 }))
+      return Promise.resolve(new Response(null, { status: 204 }))
+    }))
+    render(<App />)
+
+    await screen.findByRole('heading', { name: 'A conversa, no ritmo da call.' })
+    fireEvent.click(screen.getByRole('button', { name: 'Escutar microfone' }))
+    await waitFor(() => expect(channel.onopen).not.toBeNull())
+    channel.onopen?.()
+    await waitFor(() => expect(audioContext.resume).toHaveBeenCalled())
+    sample = 128
+
+    await waitFor(() => expect(channel.send).toHaveBeenCalledWith(JSON.stringify({ type: 'input_audio_buffer.commit' })), { timeout: 1800 })
+    fireEvent.click(screen.getByRole('button', { name: 'Parar de escutar microfone' }))
+    await waitFor(() => expect(audioContext.close).toHaveBeenCalled())
   })
 })

@@ -22,6 +22,7 @@ export type Registration = {
 }
 export type CallSession = { sessionId: string; clientSecret: string; title: string }
 export type TranscriptionSpeaker = 'USER' | 'CLIENT'
+export type CallSuggestion = { tipo: string; trechoCliente: string; proximaFala: string; pontosChave: string[] }
 
 const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.PROD
   ? 'https://api-orientador.connectas.com.br' : 'http://localhost:8080')
@@ -78,6 +79,7 @@ export const api = {
   startCall: (title: string) => request<CallSession>('/api/calls', 'POST', { title }),
   createTranscriptionSecret: (sessionId: string) => request<{ clientSecret: string }>(`/api/calls/${sessionId}/transcription-secret`, 'POST'),
   saveTranscriptSegment: (sessionId: string, sequenceNumber: number, text: string, speaker: TranscriptionSpeaker) => request<void>(`/api/calls/${sessionId}/segments`, 'POST', { sequenceNumber, text, speaker }),
+  generateSuggestion: (sessionId: string) => request<CallSuggestion>(`/api/calls/${sessionId}/suggestions`, 'POST'),
   updateCallTitle: (sessionId: string, title: string, automatic = false) => request<{ title: string }>(`/api/calls/${sessionId}/title`, 'PATCH', { title, automatic }),
   endCall: (sessionId: string) => request<void>(`/api/calls/${sessionId}/end`, 'POST'),
 }

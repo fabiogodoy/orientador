@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import logoUrl from '../../assets/brand/orientador-logo.svg'
 import logoLightUrl from '../../assets/brand/orientador-logo-light.svg'
 import termsMarkdown from '../../docs/legal/termos-de-uso.md?raw'
-import { api, ApiError, TERMS_VERSION, type Account, type AccountType } from './api'
+import { api, ApiError, TERMS_VERSION, type Account, type AccountType, type CallSuggestion } from './api'
 
 const routes = {
   home: '/app/',
@@ -178,23 +178,6 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   return <svg {...common}><path d="M5 5h14v11H9l-4 3V5Z" /><path d="M8 9h8M8 12h5" /></svg>
 }
 
-const suggestions = [
-  {
-    label: 'Objeção de preço',
-    quote: '“Gostei da ideia, mas sinceramente achei o investimento um pouco acima do que tínhamos planejado para este trimestre.”',
-    answers: [
-      'Faz todo sentido olhar para o investimento com cuidado, Rafaela. Posso te fazer uma pergunta? Quanto custa hoje para vocês quando uma oportunidade esfria por falta de apoio no momento da call? A proposta do Orientador é justamente encurtar esse intervalo entre a dúvida e uma boa resposta.',
-      'Entendo, Rafaela. Antes de comparar apenas o valor, vale olharmos para o retorno: se o time conseguir recuperar uma oportunidade a mais por mês com mais consistência nas calls, como isso se compara ao investimento? Podemos começar com o grupo que mais precisa desse apoio.',
-    ],
-    points: ['Valide a preocupação antes de argumentar.', 'Retome a dor que ela trouxe: oportunidades que esfriam.', 'Convide para comparar impacto e não apenas preço.'],
-  },
-]
-
-const previousSuggestions = [
-  { label: 'Aprofundar a dor', time: '01:26', quote: '“Às vezes a oportunidade já esfriou.”', answer: 'Quando isso acontece, o que normalmente se perde primeiro: velocidade de resposta, confiança do vendedor ou o contexto da conversa? Isso ajuda a entender onde um apoio em tempo real faria mais diferença.' },
-  { label: 'Descoberta', time: '00:31', quote: '“Cada vendedor conduz as calls de um jeito.”', answer: 'O que vocês já tentaram para dar mais consistência ao time? Quero entender se o desafio é mais de processo, de treinamento ou de apoio durante a conversa.' },
-]
-
 function formatDuration(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0')
   const seconds = (totalSeconds % 60).toString().padStart(2, '0')
@@ -203,9 +186,12 @@ function formatDuration(totalSeconds: number) {
 
 type AudioSource = 'microphone' | 'tab'
 type TranscriptSpeaker = 'you' | 'client'
-type SourceCapture = { stream: MediaStream; connection: RTCPeerConnection }
+type SourceCapture = { stream: MediaStream; connection: RTCPeerConnection; stopTurnDetection: () => void }
 type DisplayAudioOptions = DisplayMediaStreamOptions & { preferCurrentTab?: boolean; selfBrowserSurface?: 'exclude'; systemAudio?: 'include'; windowAudio?: 'system' }
 const FALLBACK_MEETING_TITLE = 'Reunião sem título'
+const TURN_DETECTION_INTERVAL_MS = 100
+const TURN_SILENCE_MS = 700
+const VOICE_RMS_THRESHOLD = 0.018
 
 class RealtimeConnectionError extends Error {
   constructor(readonly status: number) {
@@ -223,8 +209,9 @@ function HomePage() {
   const [microphoneOn, setMicrophoneOn] = useState(false)
   const [tabAudioOn, setTabAudioOn] = useState(false)
   const [elapsedSeconds, setElapsedSeconds] = useState(1002)
-  const [suggestionVersion, setSuggestionVersion] = useState(0)
-  const [expandedSuggestion, setExpandedSuggestion] = useState<number | null>(null)
+  const [suggestion, setSuggestion] = useState<CallSuggestion | null>(null)
+  const [suggestionLoading, setSuggestionLoading] = useState(false)
+  const [suggestionError, setSuggestionError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [meetingTitle, setMeetingTitle] = useState(FALLBACK_MEETING_TITLE)
@@ -243,6 +230,8 @@ function HomePage() {
   const hasManualMeetingTitle = useRef(false)
   const hasCapturedTabTitle = useRef(false)
   const pendingSegmentWrites = useRef(new Set<Promise<void>>())
+  const latestClientSegment = useRef<number | null>(null)
+  const suggestionRequest = useRef(0)
   useEffect(() => {
     api.me().then(setAccount).catch(cause => {
       if (cause instanceof ApiError && cause.code === 'TRIAL_EXPIRED') {
@@ -292,6 +281,7 @@ function HomePage() {
     const capture = sourceCaptures.current[source]
     if (!capture) return false
     sourceCaptures.current[source] = null
+    capture.stopTurnDetection()
     capture.connection.close()
     capture.stream.getTracks().forEach(track => track.stop())
     setSourceListening(source, false)
@@ -306,6 +296,10 @@ function HomePage() {
     if (hasActiveSources()) return
     const sessionId = callSessionId.current
     callSessionId.current = null
+    latestClientSegment.current = null
+    suggestionRequest.current += 1
+    setSuggestion(null)
+    setSuggestionLoading(false)
     setIsCallActive(false)
     await waitForPendingSegments()
     if (sessionId) await api.endCall(sessionId).catch(() => setError('A captura foi encerrada localmente, mas não foi possível finalizar o histórico agora.'))
@@ -322,6 +316,10 @@ function HomePage() {
     await stopSource('tab')
     const sessionId = callSessionId.current
     callSessionId.current = null
+    latestClientSegment.current = null
+    suggestionRequest.current += 1
+    setSuggestion(null)
+    setSuggestionLoading(false)
     lastCallSessionId.current = sessionId
     setIsCallActive(false)
     await waitForPendingSegments()
@@ -337,6 +335,9 @@ function HomePage() {
         hasCapturedTabTitle.current = false
         setDisplayedMeetingTitle(FALLBACK_MEETING_TITLE)
         setLiveMessages([])
+        setSuggestion(null)
+        setSuggestionError(null)
+        latestClientSegment.current = null
         setPartialTranscript('microphone', '')
         setPartialTranscript('tab', '')
         nextSegment.current = 1
@@ -377,6 +378,9 @@ function HomePage() {
       if (message.type === 'conversation.item.input_audio_transcription.completed' && message.transcript?.trim()) {
         finalizeTranscript(source, sessionId, message.transcript)
       }
+      if (message.type === 'conversation.item.input_audio_transcription.failed' || message.type === 'error') {
+        setError('Não foi possível transcrever esta fala. Continue falando ou reinicie esta fonte de áudio.')
+      }
     } catch {
       setError('A transcrição recebeu um evento inválido. Tente iniciar a fonte novamente.')
     }
@@ -390,6 +394,12 @@ function HomePage() {
     setLiveMessages(current => [...current, { speaker, time: formatDuration(elapsedSecondsRef.current), text, source }])
     setPartialTranscript(source, '')
     const write = api.saveTranscriptSegment(sessionId, sequenceNumber, text, apiSpeakerForSource(source))
+      .then(() => {
+        if (source === 'tab' && callSessionId.current === sessionId) {
+          latestClientSegment.current = sequenceNumber
+          void generateSuggestion(sessionId, sequenceNumber)
+        }
+      })
       .catch(() => setError('A fala foi transcrita, mas não pôde ser salva no histórico.'))
     pendingSegmentWrites.current.add(write)
     void write.finally(() => pendingSegmentWrites.current.delete(write))
@@ -399,9 +409,93 @@ function HomePage() {
     await Promise.all([...pendingSegmentWrites.current])
   }
 
+  async function generateSuggestion(sessionId: string, segmentNumber: number) {
+    const requestNumber = ++suggestionRequest.current
+    setSuggestionLoading(true)
+    setSuggestionError(null)
+    try {
+      const response = await api.generateSuggestion(sessionId)
+      if (requestNumber === suggestionRequest.current && latestClientSegment.current === segmentNumber && callSessionId.current === sessionId) setSuggestion(response)
+    } catch (cause) {
+      if (requestNumber === suggestionRequest.current && latestClientSegment.current === segmentNumber && callSessionId.current === sessionId) {
+        setSuggestionError(cause instanceof ApiError ? cause.message : 'Não foi possível gerar a sugestão agora. A transcrição continua normalmente.')
+      }
+    } finally {
+      if (requestNumber === suggestionRequest.current) setSuggestionLoading(false)
+    }
+  }
+
+  function regenerateSuggestion() {
+    const sessionId = callSessionId.current
+    const segmentNumber = latestClientSegment.current
+    if (sessionId && segmentNumber) void generateSuggestion(sessionId, segmentNumber)
+  }
+
+  async function copySuggestion() {
+    if (!suggestion) return
+    try {
+      await navigator.clipboard?.writeText(suggestion.proximaFala)
+      setCopied(true)
+    } catch {
+      setError('Não foi possível copiar a sugestão agora.')
+    }
+  }
+
   function finalizePartialTranscript(source: AudioSource) {
     const sessionId = callSessionId.current
     if (sessionId) finalizeTranscript(source, sessionId, partialTranscriptsRef.current[source])
+  }
+
+  function startTurnDetection(stream: MediaStream, channel: RTCDataChannel) {
+    if (!window.AudioContext) {
+      setError('Este navegador não suporta detectar o fim da fala para a transcrição em tempo real.')
+      return () => {}
+    }
+    const audioContext = new AudioContext()
+    const analyser = audioContext.createAnalyser()
+    analyser.fftSize = 512
+    const source = audioContext.createMediaStreamSource(stream)
+    source.connect(analyser)
+    const samples = new Uint8Array(analyser.fftSize)
+    let timer: number | null = null
+    let speaking = false
+    let silenceStartedAt: number | null = null
+    let stopped = false
+
+    function commitTurn() {
+      if (channel.readyState === 'open') channel.send(JSON.stringify({ type: 'input_audio_buffer.commit' }))
+    }
+
+    function inspectAudio() {
+      if (stopped) return
+      analyser.getByteTimeDomainData(samples)
+      const averageSquaredAmplitude = samples.reduce((total, sample) => {
+        const normalized = (sample - 128) / 128
+        return total + normalized * normalized
+      }, 0) / samples.length
+      if (Math.sqrt(averageSquaredAmplitude) >= VOICE_RMS_THRESHOLD) {
+        speaking = true
+        silenceStartedAt = null
+      } else if (speaking) {
+        silenceStartedAt ??= performance.now()
+        if (performance.now() - silenceStartedAt >= TURN_SILENCE_MS) {
+          commitTurn()
+          speaking = false
+          silenceStartedAt = null
+        }
+      }
+      timer = window.setTimeout(inspectAudio, TURN_DETECTION_INTERVAL_MS)
+    }
+
+    void audioContext.resume().catch(() => setError('Não foi possível ativar a detecção de fala desta fonte.'))
+    inspectAudio()
+    return () => {
+      stopped = true
+      if (timer !== null) window.clearTimeout(timer)
+      source.disconnect()
+      analyser.disconnect()
+      void audioContext.close()
+    }
   }
 
   function tabTitleFrom(stream: MediaStream) {
@@ -440,10 +534,17 @@ function HomePage() {
 
   async function connectSource(source: AudioSource, stream: MediaStream, session: { sessionId: string; clientSecret: string }) {
     const connection = new RTCPeerConnection()
-    sourceCaptures.current[source] = { stream, connection }
+    sourceCaptures.current[source] = { stream, connection, stopTurnDetection: () => {} }
     stream.getAudioTracks().forEach(track => connection.addTrack(track, stream))
     const channel = connection.createDataChannel(`oai-${source}-events`)
     channel.onmessage = event => receiveTranscript(source, session.sessionId, event.data)
+    const activateTurnDetection = () => {
+      const capture = sourceCaptures.current[source]
+      if (capture?.stream !== stream) return
+      capture.stopTurnDetection()
+      capture.stopTurnDetection = startTurnDetection(stream, channel)
+    }
+    channel.onopen = activateTurnDetection
     stream.getTracks().forEach(track => track.addEventListener('ended', () => {
       if (sourceCaptures.current[source]?.stream === stream) {
         void stopSource(source, source === 'tab' ? 'O compartilhamento de áudio da aba foi interrompido.' : 'O microfone foi interrompido.')
@@ -454,6 +555,7 @@ function HomePage() {
     const response = await fetch('https://api.openai.com/v1/realtime/calls', { method: 'POST', headers: { Authorization: `Bearer ${session.clientSecret}`, 'Content-Type': 'application/sdp' }, body: offer.sdp })
     if (!response.ok) throw new RealtimeConnectionError(response.status)
     await connection.setRemoteDescription({ type: 'answer', sdp: await response.text() })
+    if (channel.readyState === 'open') activateTurnDetection()
     setSourceListening(source, true)
     setIsCallActive(true)
   }
@@ -513,8 +615,6 @@ function HomePage() {
   }
 
   if (!account) return <div className="loading-page" role="status">{error ?? 'Carregando seu espaço…'}</div>
-  const currentSuggestion = suggestions[0]
-  const currentAnswer = currentSuggestion.answers[suggestionVersion]
   const callStatus = !isCallActive ? 'Call encerrada' : microphoneOn && tabAudioOn ? 'Você e cliente sendo transcritos' : microphoneOn ? 'Microfone sendo transcrito' : tabAudioOn ? 'Áudio da aba sendo transcrito' : 'Call em pausa'
   const displayedTranscript = liveMessages
 
@@ -534,7 +634,7 @@ function HomePage() {
       <div className="call-actions">
         <button type="button" className={`icon-control ${microphoneOn ? 'is-on' : ''}`} aria-label={microphoneOn ? 'Parar de escutar microfone' : 'Escutar microfone'} aria-pressed={microphoneOn} onClick={() => void toggleMicrophone()}><Icon name="microphone" /></button>
         <button type="button" className={`icon-control ${tabAudioOn ? 'is-on' : ''}`} aria-label={tabAudioOn ? 'Parar de escutar áudio da aba' : 'Escutar áudio da aba'} aria-pressed={tabAudioOn} onClick={() => void toggleTabAudio()}><Icon name="tabAudio" /></button>
-        <button type="button" className="suggest-button" disabled={!isCallActive} onClick={() => setSuggestionVersion(value => (value + 1) % currentSuggestion.answers.length)}><Icon name="sparkles" />Sugerir agora</button>
+        <button type="button" className="suggest-button" disabled={!latestClientSegment.current || suggestionLoading} onClick={regenerateSuggestion}><Icon name="sparkles" />Sugerir agora</button>
         <button type="button" className={`end-button ${isCallActive ? '' : 'restart-button'}`} onClick={() => void toggleCall()}><Icon name="phone" />{isCallActive ? 'Encerrar call' : 'Iniciar call'}</button>
         <div className="settings-wrap"><button type="button" className="icon-control" aria-label="Abrir configurações da call" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(value => !value)}><Icon name="settings" /></button>{settingsOpen && <div className="settings-popover"><strong>Privacidade da call</strong><span>O áudio serve apenas à transcrição em tempo real; o Orientador mantém somente o texto final.</span><button type="button" className="logout-button" onClick={logout}>Sair da conta <span aria-hidden="true">↗</span></button></div>}</div>
       </div>
@@ -561,14 +661,16 @@ function HomePage() {
       <section className="workspace-panel guidance-panel" aria-labelledby="guidance-title">
         <header className="panel-header"><div><span className="panel-kicker ai-kicker"><Icon name="sparkles" size={17} />Orientação da IA</span><h2 id="guidance-title">Próxima melhor resposta</h2></div><span className="last-speech">Com base na última fala</span></header>
         <div className="guidance-scroll">
-          <article className="suggestion-card">
-            <div className="client-quote"><span aria-hidden="true">“</span><div><small>RAFAELA DISSE · 02:47</small><p>{currentSuggestion.quote.replaceAll('“', '').replaceAll('”', '')}</p></div></div>
-            <div className="suggestion-topline"><span className="suggestion-tag">{currentSuggestion.label}</span><span className="confidence"><i /><b>94%</b> de aderência</span></div>
-            <p className="suggested-response">{currentAnswer}</p>
-            <div className="key-points"><h3>O que vale manter na resposta</h3><ul>{currentSuggestion.points.map(point => <li key={point}>{point}</li>)}</ul></div>
-            <footer className="suggestion-actions"><button type="button" className="subtle-button" onClick={() => setCopied(true)}><Icon name="copy" size={16} />{copied ? 'Copiado na demonstração' : 'Copiar resposta'}</button><button type="button" className="subtle-button" onClick={() => setSuggestionVersion(value => (value + 1) % currentSuggestion.answers.length)}><Icon name="sparkles" size={16} />Gerar outra</button><small>Gerada agora</small></footer>
-          </article>
-          <section className="previous-suggestions" aria-labelledby="previous-title"><div className="previous-heading"><h3 id="previous-title">Sugestões anteriores</h3><span>{previousSuggestions.length}</span></div>{previousSuggestions.map((suggestion, index) => { const expanded = expandedSuggestion === index; return <article className={`previous-card ${expanded ? 'is-expanded' : ''}`} key={suggestion.time}><button type="button" className="previous-trigger" aria-expanded={expanded} onClick={() => setExpandedSuggestion(expanded ? null : index)}><span><b>{suggestion.label}</b><small>{suggestion.time}</small></span><Icon name="chevron" size={18} /></button>{expanded && <div className="previous-content"><q>{suggestion.quote}</q><p>{suggestion.answer}</p></div>}</article> })}</section>
+          {!suggestion && !suggestionLoading && !suggestionError && <p className="guidance-empty" role="status">Aguardando a primeira fala do cliente para orientar sua próxima resposta.</p>}
+          {suggestionLoading && <p className="guidance-empty" role="status">Preparando uma sugestão para a última fala do cliente…</p>}
+          {suggestionError && <div className="guidance-empty guidance-error" role="status"><p>{suggestionError}</p><button type="button" className="subtle-button" onClick={regenerateSuggestion}>Tentar novamente</button></div>}
+          {suggestion && !suggestionLoading && <article className="suggestion-card">
+            <div className="client-quote"><span aria-hidden="true">“</span><div><small>CLIENTE DISSE</small><p>{suggestion.trechoCliente}</p></div></div>
+            <div className="suggestion-topline"><span className="suggestion-tag">{suggestion.tipo}</span><span className="suggestion-context">Baseada na última fala</span></div>
+            <p className="suggested-response">{suggestion.proximaFala}</p>
+            <div className="key-points"><h3>O que vale manter na resposta</h3><ul>{suggestion.pontosChave.map(point => <li key={point}>{point}</li>)}</ul></div>
+            <footer className="suggestion-actions"><button type="button" className="subtle-button" onClick={() => void copySuggestion()}><Icon name="copy" size={16} />{copied ? 'Copiado' : 'Copiar resposta'}</button><button type="button" className="subtle-button" onClick={regenerateSuggestion}><Icon name="sparkles" size={16} />Gerar outra</button><small>Gerada agora</small></footer>
+          </article>}
         </div>
       </section>
     </main>

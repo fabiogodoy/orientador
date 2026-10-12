@@ -14,7 +14,7 @@ O projeto é greenfield. O repositório contém o harness e a primeira implement
 
 * **landing/** — landing page pública planejada em https://orientador.connectas.com.br/; ainda não implementada.
 * **frontend/** — aplicação web React com TypeScript em `/app`, com cadastro, login, Termos e área inicial; captura, transcrição e sugestões virão depois.
-* **backend/** — API Java 21 com Spring Boot; cadastro, autenticação por sessão, tenants e aceite já implementados. Persistência de transcrições e integração xAI virão depois. Endpoint público planejado: https://api-orientador.connectas.com.br.
+* **backend/** — API Java 21 com Spring Boot; cadastro, autenticação por sessão, tenants, persistência de transcrições e integração OpenAI implementados. Endpoint público planejado: https://api-orientador.connectas.com.br.
 * **PostgreSQL** — persistência dos dados do produto. Para desenvolvimento, o usuário informou um banco local chamado desenv_orientador, com usuário postgres e senha vazia.
 
 O backend foi apontado para o servidor 31.97.129.252. A configuração de deploy, certificado TLS, banco de produção e operação de cada módulo serão definidos e validados antes da publicação. Em 2026-10-10, a verificação HTTPS da API falhou por incompatibilidade entre o certificado apresentado e o nome api-orientador.connectas.com.br.
@@ -23,7 +23,7 @@ O backend foi apontado para o servidor 31.97.129.252. A configuração de deploy
 
 O frontend consumirá a API HTTPS do backend para cadastro, autenticação, organizações e histórico. O fluxo de transcrição e sugestões em tempo real deverá usar comunicação bidirecional adequada, como WebSocket, com autenticação e escopo do tenant no servidor. A landing não deve acessar transcrições.
 
-O backend guarda a credencial da xAI no servidor. O navegador não recebe a chave permanente. A xAI/Grok é a integração prevista para transcrição por streaming e geração de sugestões; modelos e limites concretos serão fixados na implementação.
+O backend guarda a credencial da OpenAI no servidor. O navegador não recebe a chave permanente. A OpenAI é a integração usada para transcrição por streaming e para geração de sugestões; a transcrição recebe segredo efêmero para conexão do navegador, enquanto a geração textual é chamada somente pelo backend. Modelos e limites concretos são fixados nas ADRs e PRDs de cada entrega.
 
 O cadastro atual gera tenant e usuário na mesma transação e registra aceite da versão vigente dos Termos. A sessão é mantida no servidor e enviada em cookie HttpOnly; escritas exigem CSRF. O prazo de avaliação do tenant é verificado no backend a cada acesso autenticado. Cadastro público não cria admins. Ver `docs/adr/ADR-0001-identidade-sessao-e-tenants.md`.
 

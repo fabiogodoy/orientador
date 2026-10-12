@@ -33,8 +33,12 @@ Texto produzido a partir da fala capturada durante uma reunião e guardado para 
 _Evitar_: gravação
 
 **Sugestão:**
-Texto apresentado ao usuário durante a reunião para apoiar sua próxima fala ou resposta a uma objeção.
+Orientação transitória apresentada ao vendedor durante a reunião para apoiar sua próxima fala ou resposta a uma objeção, baseada exclusivamente na transcrição da própria reunião.
 _Evitar_: resposta obrigatória, decisão automática
+
+**Sugestão em tempo real:**
+Sugestão produzida após uma fala final do cliente e exibida para uso imediato pelo vendedor; não compõe o histórico persistido da reunião.
+_Evitar_: resposta definitiva, registro de transcrição
 
 **Conta de acesso:**
 Identidade de uma pessoa que entra no Orientador. Não é sinônimo de tenant: uma organização pode ter várias contas de acesso.

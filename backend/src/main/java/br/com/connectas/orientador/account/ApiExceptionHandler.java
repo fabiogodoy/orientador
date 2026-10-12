@@ -3,6 +3,7 @@ package br.com.connectas.orientador.account;
 import java.util.Map;
 import br.com.connectas.orientador.call.CallService;
 import br.com.connectas.orientador.call.OpenAiRealtimeClient;
+import br.com.connectas.orientador.call.OpenAiSuggestionClient;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -50,6 +51,16 @@ public class ApiExceptionHandler {
     @ExceptionHandler(OpenAiRealtimeClient.RealtimeUnavailableException.class)
     ResponseEntity<Map<String, String>> realtimeUnavailable() {
         return error(HttpStatus.SERVICE_UNAVAILABLE, "REALTIME_UNAVAILABLE", "A transcrição em tempo real não está disponível agora.");
+    }
+
+    @ExceptionHandler(CallService.SuggestionContextUnavailableException.class)
+    ResponseEntity<Map<String, String>> suggestionContextUnavailable() {
+        return error(HttpStatus.CONFLICT, "SUGGESTION_CONTEXT_UNAVAILABLE", "Aguarde uma fala do cliente para gerar a sugestão.");
+    }
+
+    @ExceptionHandler(OpenAiSuggestionClient.SuggestionUnavailableException.class)
+    ResponseEntity<Map<String, String>> suggestionUnavailable() {
+        return error(HttpStatus.SERVICE_UNAVAILABLE, "SUGGESTION_UNAVAILABLE", "Não foi possível gerar a sugestão agora. A transcrição continua normalmente.");
     }
 
     private static ResponseEntity<Map<String, String>> error(HttpStatus status, String code, String message) {

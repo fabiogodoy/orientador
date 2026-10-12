@@ -177,10 +177,10 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .client-quote p { margin: 5px 0 0; color: #506c73; font-size: .83rem; line-height: 1.45; }
 .suggestion-topline { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 22px; }
 .suggestion-tag { padding: 6px 9px; border-radius: 99px; color: #218574; background: #e8faf4; font-size: .7rem; font-weight: 800; }
-.confidence { display: inline-flex; align-items: center; gap: 6px; color: #91a2a5; font-size: .68rem; }
-.confidence i { display: block; width: 38px; height: 4px; overflow: hidden; border-radius: 9px; background: #dcece8; }
-.confidence i::after { display: block; width: 94%; height: 100%; content: ''; border-radius: inherit; background: #37bea6; }
-.confidence b { color: #4a6c70; }
+.suggestion-context { color: #91a2a5; font-size: .68rem; font-weight: 700; }
+.guidance-empty { max-width: 30rem; margin: 2rem auto; padding: 1.25rem; color: #789197; text-align: center; line-height: 1.55; }
+.guidance-error { display: grid; justify-items: center; gap: 12px; color: #974d42; }
+.guidance-error p { margin: 0; }
 .suggested-response { margin: 16px 22px 18px; color: #284751; font-size: clamp(.96rem, 1.25vw, 1.1rem); font-weight: 600; line-height: 1.58; letter-spacing: -.015em; }
 .key-points { margin: 0 22px; padding: 15px 0 11px; border-top: 1px solid #edf1f0; }
 .key-points h3 { margin: 0 0 9px; color: #8a9d9e; font-size: .7rem; text-transform: uppercase; letter-spacing: .07em; }

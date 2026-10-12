@@ -176,7 +176,7 @@ Sempre preferir código simples funcionando a código sofisticado difícil de ma
 
 ### Dependências e credenciais
 
-Usar npm nos módulos web e Maven no backend. Adicionar bibliotecas apenas quando houver necessidade concreta, manutenção viável e avaliação de segurança. A chave permanente da xAI e segredos de produção ficam somente no backend e fora do Git. Exemplos versionados devem conter apenas placeholders ou valores locais não secretos. Credenciais existentes nunca são removidas ou substituídas automaticamente, conforme AGENTS.md.
+Usar npm nos módulos web e Maven no backend. Adicionar bibliotecas apenas quando houver necessidade concreta, manutenção viável e avaliação de segurança. A chave permanente da OpenAI e segredos de produção ficam somente no backend e fora do Git. Exemplos versionados devem conter apenas placeholders ou valores locais não secretos. Credenciais existentes nunca são removidas ou substituídas automaticamente, conforme AGENTS.md.
 
 ### Estado atual do ambiente
 

@@ -5,6 +5,7 @@ import br.com.connectas.orientador.account.Identity;
 import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -19,8 +20,11 @@ public class CallService {
     private final JdbcTemplate jdbc;
     private final AccountService accounts;
     private final OpenAiRealtimeClient realtime;
+    private final CallSuggestionGenerator suggestions;
     private final Clock clock;
-    CallService(JdbcTemplate jdbc, AccountService accounts, OpenAiRealtimeClient realtime, Clock clock) { this.jdbc = jdbc; this.accounts = accounts; this.realtime = realtime; this.clock = clock; }
+    CallService(JdbcTemplate jdbc, AccountService accounts, OpenAiRealtimeClient realtime, CallSuggestionGenerator suggestions, Clock clock) {
+        this.jdbc = jdbc; this.accounts = accounts; this.realtime = realtime; this.suggestions = suggestions; this.clock = clock;
+    }
 
     @Transactional
     CallSessionResponse start(UUID userId, String requestedTitle) {
@@ -62,6 +66,25 @@ public class CallService {
         log.info("Realtime transcript segment persisted callId={} tenantId={} sequenceNumber={} speaker={}", sessionId, identity.tenantId(), request.sequenceNumber(), request.speaker());
     }
 
+    CallSuggestionResponse suggest(UUID userId, UUID sessionId) {
+        Identity identity = accounts.currentIdentity(userId);
+        Integer active = jdbc.queryForObject("select count(*) from call_sessions where id=? and tenant_id=? and user_id=? and status='ACTIVE'", Integer.class,
+                sessionId, identity.tenantId(), identity.id());
+        if (active == null || active != 1) throw new CallNotFoundException();
+        List<SuggestionContextSegment> segments = jdbc.query("select sequence_number, speaker, text from transcript_segments where call_session_id=? and tenant_id=? order by sequence_number",
+                (resultSet, rowNumber) -> new SuggestionContextSegment(resultSet.getInt("sequence_number"), TranscriptSpeaker.valueOf(resultSet.getString("speaker")), resultSet.getString("text")), sessionId, identity.tenantId());
+        if (segments.stream().noneMatch(segment -> segment.speaker() == TranscriptSpeaker.CLIENT)) throw new SuggestionContextUnavailableException();
+        long startedAt = System.nanoTime();
+        try {
+            CallSuggestionResponse suggestion = suggestions.generate(identity.id(), List.copyOf(segments));
+            log.info("Suggestion generated callId={} tenantId={} durationMs={} segmentCount={}", sessionId, identity.tenantId(), (System.nanoTime() - startedAt) / 1_000_000, segments.size());
+            return suggestion;
+        } catch (OpenAiSuggestionClient.SuggestionUnavailableException exception) {
+            log.warn("Suggestion unavailable callId={} tenantId={} durationMs={}", sessionId, identity.tenantId(), (System.nanoTime() - startedAt) / 1_000_000);
+            throw exception;
+        }
+    }
+
     @Transactional
     void end(UUID userId, UUID sessionId) {
         Identity identity = accounts.currentIdentity(userId);
@@ -76,4 +99,5 @@ public class CallService {
         return normalized.isEmpty() ? FALLBACK_TITLE : normalized;
     }
     public static class CallNotFoundException extends RuntimeException {}
+    public static class SuggestionContextUnavailableException extends RuntimeException {}
 }

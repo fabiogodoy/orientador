@@ -28,7 +28,7 @@ Organizações são responsáveis por orientar seus usuários e definir uma base
 
 Para prestar o serviço, a Connectas trata dados de cadastro, vínculo com organização, informações de uso e o áudio capturado durante a sessão. O áudio é processado para gerar texto, mas o Orientador não o guarda como gravação. O produto guarda as transcrições; as sugestões em tempo real não são guardadas na versão inicial.
 
-As transcrições podem conter dados pessoais e informações confidenciais ditas na reunião. Elas ficam acessíveis aos perfis descritos na seção 3. O conteúdo também é enviado à xAI/Grok, fornecedora de processamento de transcrição e sugestões. Esse processamento pode envolver transferência internacional de dados. Outros usos do conteúdo dependerão de finalidade informada e base jurídica aplicável.
+As transcrições podem conter dados pessoais e informações confidenciais ditas na reunião. Elas ficam acessíveis aos perfis descritos na seção 3. O conteúdo também é enviado à OpenAI, fornecedora de processamento de transcrição e sugestões. Esse processamento pode envolver transferência internacional de dados. Outros usos do conteúdo dependerão de finalidade informada e base jurídica aplicável.
 
 Não há exclusão automática das transcrições. O titular pode pedir acesso, correção ou exclusão pelo contato indicado nestes Termos, observadas as hipóteses legais de conservação. O cancelamento da conta, por si só, não apaga imediatamente todo o histórico; o usuário pode solicitar a exclusão. A Connectas responderá aos pedidos de acordo com a legislação aplicável.
 
@@ -44,7 +44,7 @@ Preços, periodicidade, limites, forma de pagamento e condições de cancelament
 
 ## 8. Disponibilidade e responsabilidade
 
-A Connectas buscará manter o serviço seguro e disponível e corrigir falhas identificadas. Podem ocorrer interrupções por manutenção, falhas de rede, indisponibilidade de serviços de reunião, do navegador ou da xAI. A Connectas não garante transcrição perfeita nem resultado específico a partir das sugestões.
+A Connectas buscará manter o serviço seguro e disponível e corrigir falhas identificadas. Podem ocorrer interrupções por manutenção, falhas de rede, indisponibilidade de serviços de reunião, do navegador ou da OpenAI. A Connectas não garante transcrição perfeita nem resultado específico a partir das sugestões.
 
 Nenhuma disposição destes Termos exclui direitos assegurados pela legislação brasileira nem afasta responsabilidade que a Connectas não possa legalmente limitar.
 

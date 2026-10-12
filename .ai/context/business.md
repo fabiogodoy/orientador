@@ -31,7 +31,7 @@ O cadastro inicial de individuais e organizações inicia uma avaliação gratui
 
 ## Dados e confiança
 
-O produto guarda transcrições, mas não gravações de áudio ou vídeo. As sugestões em tempo real não serão persistidas na primeira versão. Não haverá exclusão automática das transcrições; os titulares poderão solicitar exclusão conforme a legislação aplicável. O serviço deve informar com clareza a captura, o uso da xAI/Grok e o acesso autorizado aos conteúdos.
+O produto guarda transcrições, mas não gravações de áudio ou vídeo. As sugestões em tempo real não serão persistidas na primeira versão. Não haverá exclusão automática das transcrições; os titulares poderão solicitar exclusão conforme a legislação aplicável. O serviço deve informar com clareza a captura, o uso da OpenAI e o acesso autorizado aos conteúdos.
 
 ## Indicadores
 

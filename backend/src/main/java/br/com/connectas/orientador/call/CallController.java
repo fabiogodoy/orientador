@@ -20,6 +20,8 @@ class CallController {
     TranscriptionSecretResponse transcriptionSecret(Authentication auth, @PathVariable UUID sessionId) { return calls.createTranscriptionSecret(((SessionPrincipal) auth.getPrincipal()).userId(), sessionId); }
     @PostMapping("/{sessionId}/segments") @ResponseStatus(HttpStatus.NO_CONTENT)
     void segment(Authentication auth, @PathVariable UUID sessionId, @Valid @RequestBody TranscriptSegmentRequest request) { calls.append(((SessionPrincipal) auth.getPrincipal()).userId(), sessionId, request); }
+    @PostMapping("/{sessionId}/suggestions")
+    CallSuggestionResponse suggestion(Authentication auth, @PathVariable UUID sessionId) { return calls.suggest(((SessionPrincipal) auth.getPrincipal()).userId(), sessionId); }
     @PatchMapping("/{sessionId}/title")
     CallTitleResponse title(Authentication auth, @PathVariable UUID sessionId, @Valid @RequestBody CallTitleRequest request) {
         return new CallTitleResponse(calls.updateTitle(((SessionPrincipal) auth.getPrincipal()).userId(), sessionId, request.title(), request.automatic()));
