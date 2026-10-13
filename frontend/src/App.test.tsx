@@ -318,9 +318,8 @@ describe('tela principal de call', () => {
     expect(await screen.findByText('Resposta 1')).toBeInTheDocument()
     channel.onmessage?.({ data: JSON.stringify({ type: 'conversation.item.input_audio_transcription.completed', transcript: 'Dúvida dois' }) } as MessageEvent)
     expect(await screen.findByText('Resposta 2')).toBeInTheDocument()
-    expect(screen.getByText('Sugestões anteriores')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Sugestão 1/ }))
     expect(screen.getByText('Resposta 1')).toBeInTheDocument()
+    expect(screen.getAllByText('O que vale manter na resposta')).toHaveLength(2)
   })
 
   it('usa a identidade da conta e permite editar o nome pelo perfil', async () => {

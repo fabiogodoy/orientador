@@ -309,7 +309,6 @@ function HomePage() {
   const [liveMessages, setLiveMessages] = useState<{ speaker: TranscriptSpeaker; time: string; text: string; source: AudioSource }[]>([])
   const [partialTranscripts, setPartialTranscripts] = useState<Record<AudioSource, string>>({ microphone: '', tab: '' })
   const [scrollFollowing, setScrollFollowing] = useState<Record<ScrollPanel, boolean>>({ transcript: true, guidance: true })
-  const [expandedSuggestion, setExpandedSuggestion] = useState<number | null>(null)
   const sourceCaptures = useRef<Record<AudioSource, SourceCapture | null>>({ microphone: null, tab: null })
   const callSessionId = useRef<string | null>(null)
   const lastCallSessionId = useRef<string | null>(null)
@@ -422,7 +421,6 @@ function HomePage() {
     latestClientSegment.current = null
     suggestionRequest.current += 1
     setSuggestions([])
-    setExpandedSuggestion(null)
     setSuggestionLoading(false)
     setIsCallActive(false)
     await waitForPendingSegments()
@@ -443,7 +441,6 @@ function HomePage() {
     latestClientSegment.current = null
     suggestionRequest.current += 1
     setSuggestions([])
-    setExpandedSuggestion(null)
     setSuggestionLoading(false)
     lastCallSessionId.current = sessionId
     setIsCallActive(false)
@@ -461,7 +458,6 @@ function HomePage() {
         setDisplayedMeetingTitle(FALLBACK_MEETING_TITLE)
         setLiveMessages([])
         setSuggestions([])
-        setExpandedSuggestion(null)
         setSuggestionError(null)
         latestClientSegment.current = null
         setPartialTranscript('microphone', '')
@@ -747,7 +743,6 @@ function HomePage() {
   const callStatus = !isCallActive ? 'Call encerrada' : microphoneOn && tabAudioOn ? 'Você e cliente sendo transcritos' : microphoneOn ? 'Microfone sendo transcrito' : tabAudioOn ? 'Áudio da aba sendo transcrito' : 'Call em pausa'
   const displayedTranscript = liveMessages
   const currentSuggestion = suggestions.at(-1)?.suggestion ?? null
-  const previousSuggestions = suggestions.slice(0, -1)
   const avatarUrl = account.avatarUpdatedAt ? api.avatarUrl(account.avatarUpdatedAt) : null
   const accountContext = account.accountType === 'ORGANIZATION' ? `Gestor(a) · ${account.organizationName}` : 'Conta individual'
 
@@ -799,14 +794,13 @@ function HomePage() {
           {!currentSuggestion && !suggestionLoading && !suggestionError && <p className="guidance-empty" role="status">Aguardando a primeira fala do cliente para orientar sua próxima resposta.</p>}
           {suggestionLoading && <p className="guidance-empty" role="status">Preparando uma sugestão para a última fala do cliente…</p>}
           {suggestionError && <div className="guidance-empty guidance-error" role="status"><p>{suggestionError}</p><button type="button" className="subtle-button" onClick={regenerateSuggestion}>Tentar novamente</button></div>}
-          {!!previousSuggestions.length && <section className="previous-suggestions" aria-label="Sugestões anteriores"><header className="previous-heading"><h3>Sugestões anteriores</h3><span>{previousSuggestions.length}</span></header>{previousSuggestions.map(entry => <article className={`previous-card ${expandedSuggestion === entry.segmentNumber ? 'is-expanded' : ''}`} key={entry.segmentNumber}><button type="button" className="previous-trigger" aria-expanded={expandedSuggestion === entry.segmentNumber} onClick={() => setExpandedSuggestion(current => current === entry.segmentNumber ? null : entry.segmentNumber)}><span><b>{entry.suggestion.tipo}</b><small>{entry.suggestion.trechoCliente}</small></span><Icon name="chevron" size={16} /></button>{expandedSuggestion === entry.segmentNumber && <div className="previous-content"><q>{entry.suggestion.trechoCliente}</q><p>{entry.suggestion.proximaFala}</p></div>}</article>)}</section>}
-          {currentSuggestion && !suggestionLoading && <article className="suggestion-card">
-            <div className="client-quote"><span aria-hidden="true">“</span><div><small>CLIENTE DISSE</small><p>{currentSuggestion.trechoCliente}</p></div></div>
-            <div className="suggestion-topline"><span className="suggestion-tag">{currentSuggestion.tipo}</span><span className="suggestion-context">Baseada na última fala</span></div>
-            <p className="suggested-response">{currentSuggestion.proximaFala}</p>
-            <div className="key-points"><h3>O que vale manter na resposta</h3><ul>{currentSuggestion.pontosChave.map(point => <li key={point}>{point}</li>)}</ul></div>
-            <footer className="suggestion-actions"><button type="button" className="subtle-button" onClick={() => void copySuggestion()}><Icon name="copy" size={16} />{copied ? 'Copiado' : 'Copiar resposta'}</button><button type="button" className="subtle-button" onClick={regenerateSuggestion}><Icon name="sparkles" size={16} />Gerar outra</button><small>Gerada agora</small></footer>
-          </article>}
+          {suggestions.map((entry, index) => <article className="suggestion-card" key={entry.segmentNumber}>
+            <div className="client-quote"><span aria-hidden="true">“</span><div><small>CLIENTE DISSE</small><p>{entry.suggestion.trechoCliente}</p></div></div>
+            <div className="suggestion-topline"><span className="suggestion-tag">{entry.suggestion.tipo}</span><span className="suggestion-context">{index === suggestions.length - 1 ? 'Baseada na última fala' : 'Sugestão anterior'}</span></div>
+            <p className="suggested-response">{entry.suggestion.proximaFala}</p>
+            <div className="key-points"><h3>O que vale manter na resposta</h3><ul>{entry.suggestion.pontosChave.map(point => <li key={point}>{point}</li>)}</ul></div>
+            {index === suggestions.length - 1 && <footer className="suggestion-actions"><button type="button" className="subtle-button" onClick={() => void copySuggestion()}><Icon name="copy" size={16} />{copied ? 'Copiado' : 'Copiar resposta'}</button><button type="button" className="subtle-button" onClick={regenerateSuggestion}><Icon name="sparkles" size={16} />Gerar outra</button><small>Gerada agora</small></footer>}
+          </article>)}
           {!scrollFollowing.guidance && <button type="button" className="scroll-latest-button" onClick={() => scrollToLatest('guidance', 'smooth', true)}>Voltar ao mais recente <span aria-hidden="true">↓</span></button>}
         </div>
       </section>
