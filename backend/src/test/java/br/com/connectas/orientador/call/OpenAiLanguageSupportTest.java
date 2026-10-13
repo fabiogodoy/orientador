@@ -27,6 +27,6 @@ class OpenAiLanguageSupportTest {
         assertTrue(OpenAiSuggestionClient.INSTRUCTIONS.contains("português"));
         assertTrue(OpenAiSuggestionClient.INSTRUCTIONS.contains("inglês"));
         assertTrue(OpenAiSuggestionClient.INSTRUCTIONS.contains("conversa pode alternar"));
-        assertTrue(OpenAiSuggestionClient.INSTRUCTIONS.contains("Não invente preço, prazo, funcionalidade"));
+        assertTrue(OpenAiSuggestionClient.INSTRUCTIONS.contains("nunca invente ou afirme como confirmados"));
     }
 }

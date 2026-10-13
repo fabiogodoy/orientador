@@ -68,6 +68,14 @@ _Evitar_: fonte de captura como sinônimo de sessão
 Trecho textual finalizado por detecção de fala dentro de uma sessão de call. É persistido; áudio bruto não é.
 _Evitar_: chunk de áudio
 
+**Bloco de áudio temporário:**
+Recorte em memória, de duração limitada, produzido por uma fonte de captura e encaminhado uma única vez para transcrição. Não é um segmento de transcrição, não entra no histórico e não pode ser persistido pela aplicação.
+_Evitar_: gravação, anexo de reunião, segmento de transcrição
+
+**Resumo interno de contexto:**
+Síntese transitória mantida somente na memória da call para dar contexto acumulado à próxima sugestão. Não é exibida, exportada, persistida, nem integra a análise executiva da reunião.
+_Evitar_: resumo executivo, histórico de orientação, ata
+
 **Transcrição parcial:**
 Texto transitório recebido enquanto a pessoa fala. Quando uma fonte é parada antes do evento de conclusão do provedor, o texto recebido até então é finalizado como segmento interrompido para não desaparecer da reunião.
 _Evitar_: transcrição salva
@@ -103,3 +111,15 @@ _Evitar_: usuário e cliente como nomes de participantes
 **Temperatura da reunião:**
 Classificação qualitativa do clima relacional da conversa como positiva, neutra ou tensa, acompanhada de uma justificativa breve baseada em tom, colaboração, objeções e conflitos.
 _Evitar_: nota de sucesso comercial, pontuação de desempenho
+
+**Preparação da reunião:**
+Informações opcionais escolhidas antes de iniciar a captura: contexto específico daquela reunião e, no máximo, uma base de conhecimento preexistente. Não é parte da transcrição, do resumo executivo ou do histórico exibido.
+_Evitar_: prompt livre durante a call, configuração posterior à captura
+
+**Contexto da reunião:**
+Texto pontual fornecido pela pessoa antes de uma call para situar seu objetivo, cenário ou restrições. Pertence somente àquela sessão de call e é preservado com ela sem ser exibido no histórico.
+_Evitar_: base de conhecimento, resumo interno de contexto
+
+**Base de conhecimento:**
+Referência textual reutilizável, pertencente a um tenant, que uma pessoa pode selecionar para orientar sugestões em uma call. É compartilhada para leitura dentro do tenant; sua administração é limitada ao criador ou gestor organizacional, conforme o perfil.
+_Evitar_: documento anexado, fonte de fatos automaticamente confirmados

@@ -26,3 +26,5 @@ app:
   frontend-origin: ${FRONTEND_ORIGIN:http://localhost:5173}
   openai:
     api-key: ${OPENAI_API_KEY:}
+  groq:
+    api-key: ${GROQ_API_KEY:}

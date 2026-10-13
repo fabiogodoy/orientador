@@ -21,9 +21,11 @@ export type Registration = {
   termsAccepted: boolean
   termsVersion: string
 }
-export type CallSession = { sessionId: string; clientSecret: string; title: string }
+export type CallSession = { sessionId: string; title: string }
+export type KnowledgeBase = { id: string; name: string; content: string; createdByUserId: string; updatedAt: string }
+export type CallPreparation = { meetingContext?: string; knowledgeBaseId?: string }
 export type TranscriptionSpeaker = 'USER' | 'CLIENT'
-export type CallSuggestion = { tipo: string; trechoCliente: string; proximaFala: string; pontosChave: string[] }
+export type CallSuggestion = { tipo: string; trechoCliente: string; proximaFala: string; pontosChave: string[]; contextSummary: string; summarizedThrough: number }
 export type CallHistoryItem = { sessionId: string; title: string; startedAt: string; endedAt: string; durationSeconds: number; ownerId: string; ownerName: string }
 export type CallHistoryPage = { items: CallHistoryItem[]; page: number; pageSize: number; total: number }
 export type TranscriptHistorySegment = { sequenceNumber: number; speaker: TranscriptionSpeaker; text: string; finalizedAt: string }
@@ -94,6 +96,12 @@ async function upload(path: string, file: Blob): Promise<Account> {
   return (await response.json()) as Account
 }
 
+async function uploadAudio(sessionId: string, source: 'microphone' | 'tab', sequenceNumber: number, audio: Blob): Promise<{ sequenceNumber: number; speaker: TranscriptionSpeaker; text: string }> {
+  const response = await fetch(`${API_URL}/api/calls/${sessionId}/audio/${source}/${sequenceNumber}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'audio/webm', 'X-CSRF-TOKEN': await getCsrfToken() }, body: audio })
+  if (!response.ok) { const data = await response.json().catch(() => ({})) as { code?: string; message?: string }; throw new ApiError(data.code ?? 'REQUEST_ERROR', data.message ?? 'Não foi possível transcrever este bloco.') }
+  return response.json()
+}
+
 export const api = {
   register: (data: Registration) => request<Account>('/api/auth/register', 'POST', data),
   login: (email: string, password: string) => request<Account>('/api/auth/login', 'POST', { email, password }),
@@ -106,13 +114,17 @@ export const api = {
     await request<void>('/api/auth/logout', 'POST')
     csrfToken = null
   },
-  startCall: (title: string) => request<CallSession>('/api/calls', 'POST', { title }),
+  startCall: (title: string, preparation: CallPreparation = {}) => request<CallSession>('/api/calls', 'POST', { title, ...preparation }),
+  knowledgeBases: () => request<KnowledgeBase[]>('/api/knowledge-bases', 'GET'),
+  createKnowledgeBase: (name: string, content: string) => request<KnowledgeBase>('/api/knowledge-bases', 'POST', { name, content }),
+  updateKnowledgeBase: (id: string, name: string, content: string) => request<KnowledgeBase>(`/api/knowledge-bases/${id}`, 'PUT', { name, content }),
+  deleteKnowledgeBase: (id: string) => request<void>(`/api/knowledge-bases/${id}`, 'DELETE'),
   callHistory: (page: number) => request<CallHistoryPage>(`/api/calls?page=${page}`, 'GET'),
   callHistoryDetail: (sessionId: string) => request<CallHistoryDetail>(`/api/calls/${sessionId}`, 'GET'),
   generateExecutiveAnalysis: (sessionId: string) => request<MeetingAnalysisState>(`/api/calls/${sessionId}/executive-analysis`, 'POST'),
-  createTranscriptionSecret: (sessionId: string) => request<{ clientSecret: string }>(`/api/calls/${sessionId}/transcription-secret`, 'POST'),
+  transcribeAudio: (sessionId: string, source: 'microphone' | 'tab', sequenceNumber: number, audio: Blob) => uploadAudio(sessionId, source, sequenceNumber, audio),
   saveTranscriptSegment: (sessionId: string, sequenceNumber: number, text: string, speaker: TranscriptionSpeaker) => request<void>(`/api/calls/${sessionId}/segments`, 'POST', { sequenceNumber, text, speaker }),
-  generateSuggestion: (sessionId: string) => request<CallSuggestion>(`/api/calls/${sessionId}/suggestions`, 'POST'),
+  generateSuggestion: (sessionId: string, contextSummary: string, summarizedThrough: number) => request<CallSuggestion>(`/api/calls/${sessionId}/suggestions`, 'POST', { contextSummary, summarizedThrough }),
   updateCallTitle: (sessionId: string, title: string, automatic = false) => request<{ title: string }>(`/api/calls/${sessionId}/title`, 'PATCH', { title, automatic }),
   endCall: (sessionId: string) => request<void>(`/api/calls/${sessionId}/end`, 'POST'),
 }

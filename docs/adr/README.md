@@ -12,7 +12,7 @@ Nunca reutilizar um número já listado, mesmo que o trabalho tenha sido feito e
 
 ## Próximo número livre
 
-`ADR-0007`
+`ADR-0009`
 
 ## ADRs registradas
 
@@ -24,3 +24,5 @@ Nunca reutilizar um número já listado, mesmo que o trabalho tenha sido feito e
 | ADR-0004 | Geração de sugestões comerciais no backend com OpenAI | `intent/sugestoes-fala-tempo-real.md` |
 | ADR-0005 | Avatar de perfil normalizado no PostgreSQL | `intent/perfil-do-usuario.md` |
 | ADR-0006 | Análise executiva imutável por reunião | `intent/analise-executiva-reunioes.md` |
+| ADR-0007 | Transcrição econômica por blocos e contexto efêmero | `intent/transcricao-e-sugestoes-economicas.md` |
+| ADR-0008 | Preparação por call e bases de conhecimento por tenant | `intent/preparacao-e-bases-de-conhecimento.md` |

@@ -2,8 +2,9 @@ package br.com.connectas.orientador.account;
 
 import java.util.Map;
 import br.com.connectas.orientador.call.CallService;
-import br.com.connectas.orientador.call.OpenAiRealtimeClient;
+import br.com.connectas.orientador.call.GroqTranscriptionClient;
 import br.com.connectas.orientador.call.OpenAiSuggestionClient;
+import br.com.connectas.orientador.call.KnowledgeBaseService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -59,10 +60,18 @@ public class ApiExceptionHandler {
         return error(HttpStatus.NOT_FOUND, "CALL_NOT_FOUND", "Esta call não está disponível.");
     }
 
-    @ExceptionHandler(OpenAiRealtimeClient.RealtimeUnavailableException.class)
-    ResponseEntity<Map<String, String>> realtimeUnavailable() {
-        return error(HttpStatus.SERVICE_UNAVAILABLE, "REALTIME_UNAVAILABLE", "A transcrição em tempo real não está disponível agora.");
+    @ExceptionHandler(KnowledgeBaseService.KnowledgeBaseNotFoundException.class)
+    ResponseEntity<Map<String, String>> knowledgeBaseNotFound() {
+        return error(HttpStatus.NOT_FOUND, "KNOWLEDGE_BASE_NOT_FOUND", "Esta base de conhecimento não está disponível.");
     }
+
+    @ExceptionHandler(GroqTranscriptionClient.TranscriptionUnavailableException.class)
+    ResponseEntity<Map<String, String>> transcriptionUnavailable() {
+        return error(HttpStatus.SERVICE_UNAVAILABLE, "TRANSCRIPTION_UNAVAILABLE", "A transcrição não está disponível agora.");
+    }
+
+    @ExceptionHandler(CallService.InvalidAudioChunkException.class)
+    ResponseEntity<Map<String, String>> invalidAudioChunk() { return error(HttpStatus.BAD_REQUEST, "INVALID_AUDIO_CHUNK", "O bloco de áudio não é válido."); }
 
     @ExceptionHandler(CallService.SuggestionContextUnavailableException.class)
     ResponseEntity<Map<String, String>> suggestionContextUnavailable() {

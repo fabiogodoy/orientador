@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import logoUrl from '../../assets/brand/orientador-logo.svg'
 import logoLightUrl from '../../assets/brand/orientador-logo-light.svg'
 import termsMarkdown from '../../docs/legal/termos-de-uso.md?raw'
-import { api, ApiError, TERMS_VERSION, type Account, type AccountType, type CallHistoryDetail, type CallHistoryItem, type CallHistoryPage, type CallSuggestion, type MeetingAnalysisState } from './api'
+import { api, ApiError, TERMS_VERSION, type Account, type AccountType, type CallHistoryDetail, type CallHistoryItem, type CallHistoryPage, type CallSuggestion, type KnowledgeBase, type MeetingAnalysisState } from './api'
 
 const routes = {
   home: '/app/',
@@ -192,24 +192,27 @@ function formatDateTime(value: string) {
 
 type AudioSource = 'microphone' | 'tab'
 type TranscriptSpeaker = 'you' | 'client'
-type SourceCapture = { stream: MediaStream; connection: RTCPeerConnection; stopTurnDetection: () => void }
+type SourceCapture = {
+  stream: MediaStream
+  audioStream: MediaStream
+  recorder: MediaRecorder | null
+  rotationTimer: number | null
+  stopCompletion: Promise<void> | null
+  audioContext: AudioContext | null
+  audioActivityTimer: number | null
+  usesAudioActivityDetection: boolean
+  hasAudibleSignal: boolean
+}
 type ScrollPanel = 'transcript' | 'guidance'
 type SuggestionEntry = { segmentNumber: number; suggestion: CallSuggestion }
 type DisplayAudioOptions = DisplayMediaStreamOptions & { preferCurrentTab?: boolean; selfBrowserSurface?: 'exclude'; systemAudio?: 'include'; windowAudio?: 'system' }
 const FALLBACK_MEETING_TITLE = 'Reunião sem título'
-const TURN_DETECTION_INTERVAL_MS = 100
-const TURN_SILENCE_MS = 700
-const VOICE_RMS_THRESHOLD = 0.018
 const SCROLL_FOLLOW_THRESHOLD = 48
-
-class RealtimeConnectionError extends Error {
-  constructor(readonly status: number) {
-    super('Realtime connection failed')
-  }
-}
+const AUDIO_CHUNK_DURATION_MS = 15_000
+const AUDIO_ACTIVITY_SAMPLE_MS = 250
+const SPEECH_RMS_THRESHOLD = 5
 
 const speakerForSource: Record<AudioSource, TranscriptSpeaker> = { microphone: 'you', tab: 'client' }
-const apiSpeakerForSource = (source: AudioSource) => source === 'microphone' ? 'USER' : 'CLIENT'
 
 function initials(name: string) {
   return name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || '?'
@@ -291,6 +294,55 @@ function ProfileDialog({ account, onClose, onAccountChange }: { account: Account
   </div>
 }
 
+function KnowledgeBasesDialog({ account, onClose }: { account: Account; onClose: () => void }) {
+  const [bases, setBases] = useState<KnowledgeBase[]>([])
+  const [name, setName] = useState('')
+  const [content, setContent] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => { api.knowledgeBases().then(data => setBases(Array.isArray(data) ? data : [])).catch(cause => setError(cause instanceof ApiError ? cause.message : 'Não foi possível carregar as bases.')) }, [])
+  const canManage = (base: KnowledgeBase) => account.role === 'ORGANIZATION_MANAGER' || base.createdByUserId === account.id
+  function resetForm() { setName(''); setContent(''); setEditingId(null); setError(null) }
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError(null)
+    try {
+      const base = editingId ? await api.updateKnowledgeBase(editingId, name, content) : await api.createKnowledgeBase(name, content)
+      setBases(current => [base, ...current.filter(item => item.id !== base.id)])
+      resetForm()
+    } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Não foi possível salvar a base agora.') } finally { setBusy(false) }
+  }
+  async function remove(base: KnowledgeBase) {
+    if (!window.confirm(`Excluir a base “${base.name}”? As reuniões já iniciadas preservam sua cópia.`)) return
+    setBusy(true); setError(null)
+    try { await api.deleteKnowledgeBase(base.id); setBases(current => current.filter(item => item.id !== base.id)); if (editingId === base.id) resetForm() }
+    catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Não foi possível excluir a base agora.') } finally { setBusy(false) }
+  }
+  return <div className="profile-backdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) onClose() }}>
+    <section className="profile-dialog knowledge-dialog" role="dialog" aria-modal="true" aria-labelledby="knowledge-bases-title">
+      <header><div><span className="profile-kicker">SUA BIBLIOTECA</span><h2 id="knowledge-bases-title">Bases de conhecimento</h2></div><button className="profile-close" type="button" onClick={onClose} aria-label="Fechar bases de conhecimento">×</button></header>
+      <p className="dialog-description">Use textos que ajudam a orientar suas respostas. Eles ficam disponíveis apenas para pessoas do seu tenant.</p><ErrorNotice message={error} />
+      <form className="knowledge-form" onSubmit={save}><label htmlFor="knowledge-base-name">Nome da base</label><input id="knowledge-base-name" required maxLength={120} value={name} onChange={event => setName(event.target.value)} placeholder="Ex.: Produtos e preços" /><label htmlFor="knowledge-base-content">Conteúdo</label><textarea id="knowledge-base-content" required maxLength={12000} value={content} onChange={event => setContent(event.target.value)} placeholder="Políticas, experiências, diferenciais e informações que a IA pode consultar…" /><small>{content.length.toLocaleString('pt-BR')}/12.000 caracteres</small><div className="dialog-actions"><button type="button" className="subtle-button" onClick={resetForm} disabled={busy}>Limpar</button><button className="primary-button compact-primary" type="submit" disabled={busy}>{busy ? 'Salvando…' : editingId ? 'Salvar alterações' : 'Criar base'}</button></div></form>
+      <div className="knowledge-list"><h3>Disponíveis neste tenant</h3>{bases.length === 0 ? <p>Nenhuma base cadastrada ainda.</p> : bases.map(base => <article key={base.id}><div><strong>{base.name}</strong><p>{base.content}</p></div>{canManage(base) && <div className="knowledge-item-actions"><button type="button" onClick={() => { setEditingId(base.id); setName(base.name); setContent(base.content) }}>Editar</button><button type="button" className="text-danger" onClick={() => void remove(base)} disabled={busy}>Excluir</button></div>}</article>)}</div>
+    </section>
+  </div>
+}
+
+function PreparationDialog({ onStart }: { onStart: (context: string, knowledgeBaseId: string | undefined) => void }) {
+  const [bases, setBases] = useState<KnowledgeBase[]>([])
+  const [context, setContext] = useState('')
+  const [selectedBaseId, setSelectedBaseId] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => { api.knowledgeBases().then(data => setBases(Array.isArray(data) ? data : [])).catch(cause => setError(cause instanceof ApiError ? cause.message : 'Não foi possível carregar as bases. Você ainda pode iniciar sem elas.')) }, [])
+  return <div className="profile-backdrop"><section className="profile-dialog preparation-dialog" role="dialog" aria-modal="true" aria-labelledby="preparation-title">
+    <header><div><span className="profile-kicker">ANTES DE COMEÇAR</span><h2 id="preparation-title">Preparar reunião</h2></div></header>
+    <p className="dialog-description">Opcional: dê um contexto para esta conversa e escolha uma base. Você pode ignorar e seguir como está.</p><ErrorNotice message={error} />
+    <label htmlFor="meeting-context">Contexto da reunião</label><textarea id="meeting-context" maxLength={6000} value={context} onChange={event => setContext(event.target.value)} placeholder="Objetivo, pessoa com quem você falará, cenário ou restrições…" /><small>{context.length.toLocaleString('pt-BR')}/6.000 caracteres</small>
+    <label htmlFor="knowledge-base-select">Base de conhecimento</label><select id="knowledge-base-select" value={selectedBaseId} onChange={event => setSelectedBaseId(event.target.value)}><option value="">Nenhuma — usar somente a conversa</option>{bases.map(base => <option key={base.id} value={base.id}>{base.name}</option>)}</select>
+    <div className="dialog-actions preparation-actions"><button type="button" className="subtle-button" onClick={() => onStart('', undefined)}>Ignorar e iniciar</button><button type="button" className="primary-button compact-primary" onClick={() => onStart(context, selectedBaseId || undefined)}>Continuar</button></div>
+  </section></div>
+}
+
 function HomePage() {
   const [account, setAccount] = useState<Account | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -304,6 +356,8 @@ function HomePage() {
   const [copied, setCopied] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [knowledgeBasesOpen, setKnowledgeBasesOpen] = useState(false)
+  const [preparationOpen, setPreparationOpen] = useState(false)
   const [meetingTitle, setMeetingTitle] = useState(FALLBACK_MEETING_TITLE)
   const [meetingTitleDraft, setMeetingTitleDraft] = useState(FALLBACK_MEETING_TITLE)
   const [editingMeetingTitle, setEditingMeetingTitle] = useState(false)
@@ -313,15 +367,19 @@ function HomePage() {
   const sourceCaptures = useRef<Record<AudioSource, SourceCapture | null>>({ microphone: null, tab: null })
   const callSessionId = useRef<string | null>(null)
   const lastCallSessionId = useRef<string | null>(null)
-  const sessionStart = useRef<Promise<{ sessionId: string; clientSecret: string; title: string }> | null>(null)
+  const sessionStart = useRef<Promise<{ sessionId: string; title: string }> | null>(null)
   const nextSegment = useRef(1)
   const elapsedSecondsRef = useRef(elapsedSeconds)
   const partialTranscriptsRef = useRef(partialTranscripts)
   const meetingTitleRef = useRef(meetingTitle)
+  const preparation = useRef<{ meetingContext?: string; knowledgeBaseId?: string }>({})
+  const preparationConfirmed = useRef(false)
+  const pendingStartSource = useRef<AudioSource | null>(null)
   const hasManualMeetingTitle = useRef(false)
   const hasCapturedTabTitle = useRef(false)
   const pendingSegmentWrites = useRef(new Set<Promise<void>>())
   const latestClientSegment = useRef<number | null>(null)
+  const contextSummary = useRef({ value: '', through: 0 })
   const suggestionRequest = useRef(0)
   const pendingSuggestionTimer = useRef<number | null>(null)
   const transcriptScrollRef = useRef<HTMLDivElement>(null)
@@ -401,14 +459,20 @@ function HomePage() {
     else element.scrollTop = element.scrollHeight
   }
 
-  function releaseSource(source: AudioSource) {
+  async function releaseSource(source: AudioSource) {
     const capture = sourceCaptures.current[source]
     if (!capture) return false
     sourceCaptures.current[source] = null
-    capture.stopTurnDetection()
-    capture.connection.close()
+    if (capture.rotationTimer !== null) window.clearTimeout(capture.rotationTimer)
+    capture.rotationTimer = null
+    if (capture.audioActivityTimer !== null) window.clearInterval(capture.audioActivityTimer)
+    capture.audioActivityTimer = null
+    if (capture.audioContext) void capture.audioContext.close().catch(() => undefined)
+    const stopCompletion = capture.stopCompletion
+    if (capture.recorder?.state !== 'inactive') capture.recorder?.stop()
     capture.stream.getTracks().forEach(track => track.stop())
     setSourceListening(source, false)
+    await stopCompletion
     return true
   }
 
@@ -421,6 +485,7 @@ function HomePage() {
     const sessionId = callSessionId.current
     callSessionId.current = null
     latestClientSegment.current = null
+    contextSummary.current = { value: '', through: 0 }
     suggestionRequest.current += 1
     setSuggestions([])
     setSuggestionLoading(false)
@@ -430,8 +495,7 @@ function HomePage() {
   }
 
   async function stopSource(source: AudioSource, message?: string) {
-    finalizePartialTranscript(source)
-    if (!releaseSource(source)) return
+    if (!await releaseSource(source)) return
     if (message) setError(message)
   }
 
@@ -446,12 +510,14 @@ function HomePage() {
     setSuggestionLoading(false)
     lastCallSessionId.current = sessionId
     setIsCallActive(false)
+    preparationConfirmed.current = false
+    preparation.current = {}
     await waitForPendingSegments()
     if (sessionId) await api.endCall(sessionId).catch(() => setError('A captura foi encerrada localmente, mas não foi possível finalizar o histórico agora.'))
   }
 
   async function ensureSession() {
-    if (callSessionId.current) return { sessionId: callSessionId.current, clientSecret: (await api.createTranscriptionSecret(callSessionId.current)).clientSecret }
+    if (callSessionId.current) return { sessionId: callSessionId.current }
     if (!sessionStart.current) {
       if (lastCallSessionId.current) {
         lastCallSessionId.current = null
@@ -462,11 +528,12 @@ function HomePage() {
         setSuggestions([])
         setSuggestionError(null)
         latestClientSegment.current = null
+        contextSummary.current = { value: '', through: 0 }
         setPartialTranscript('microphone', '')
         setPartialTranscript('tab', '')
         nextSegment.current = 1
       }
-      sessionStart.current = api.startCall(meetingTitleRef.current)
+      sessionStart.current = api.startCall(meetingTitleRef.current, preparation.current)
     }
     try {
       const session = await sessionStart.current
@@ -484,47 +551,18 @@ function HomePage() {
     if (cause instanceof DOMException && cause.name === 'NotAllowedError') {
       return source === 'microphone' ? 'Permita o microfone para iniciar a transcrição.' : 'A escolha da aba foi cancelada ou não foi permitida.'
     }
-    if (cause instanceof RealtimeConnectionError) {
-      return cause.status === 401 || cause.status === 403
-        ? 'A sessão de transcrição expirou ou não foi autorizada. Tente iniciar novamente.'
-        : 'Não foi possível conectar à transcrição em tempo real. Confira sua conexão e tente novamente.'
-    }
     return source === 'microphone' ? 'Não foi possível acessar o microfone agora. Tente novamente.' : 'Não foi possível iniciar o áudio da aba agora. Tente novamente.'
   }
 
-  function receiveTranscript(source: AudioSource, sessionId: string, payload: unknown) {
-    if (typeof payload !== 'string') return
-    try {
-      const message = JSON.parse(payload) as { type?: string; delta?: string; transcript?: string }
-      if (message.type === 'conversation.item.input_audio_transcription.delta') {
-        if (source === 'tab') cancelScheduledSuggestion()
-        setPartialTranscript(source, partialTranscriptsRef.current[source] + (message.delta ?? ''))
-      }
-      if (message.type === 'conversation.item.input_audio_transcription.completed' && message.transcript?.trim()) {
-        finalizeTranscript(source, sessionId, message.transcript)
-      }
-      if (message.type === 'conversation.item.input_audio_transcription.failed' || message.type === 'error') {
-        setError('Não foi possível transcrever esta fala. Continue falando ou reinicie esta fonte de áudio.')
-      }
-    } catch {
-      setError('A transcrição recebeu um evento inválido. Tente iniciar a fonte novamente.')
-    }
-  }
-
-  function finalizeTranscript(source: AudioSource, sessionId: string, rawText: string) {
-    const text = rawText.trim()
-    if (!text) return
+  function receiveAudioChunk(source: AudioSource, sessionId: string, audio: Blob) {
+    if (!audio.size) return
     const sequenceNumber = nextSegment.current++
-    const speaker = speakerForSource[source]
-    setLiveMessages(current => [...current, { speaker, time: formatDuration(elapsedSecondsRef.current), text, source }])
-    setPartialTranscript(source, '')
-    const write = api.saveTranscriptSegment(sessionId, sequenceNumber, text, apiSpeakerForSource(source))
-      .then(() => {
-        if (source === 'tab' && callSessionId.current === sessionId) {
-          scheduleSuggestion(sessionId, sequenceNumber)
-        }
-      })
-      .catch(() => setError('A fala foi transcrita, mas não pôde ser salva no histórico.'))
+    const write = api.transcribeAudio(sessionId, source, sequenceNumber, audio).then(response => {
+      if (callSessionId.current !== sessionId) return
+      const speaker = speakerForSource[source]
+      setLiveMessages(current => [...current, { speaker, time: formatDuration(elapsedSecondsRef.current), text: response.text, source }])
+      if (source === 'tab' && shouldSuggest(response.text)) scheduleSuggestion(sessionId, sequenceNumber)
+    }).catch(cause => setError(cause instanceof ApiError ? cause.message : 'Não foi possível transcrever este bloco. A call continua normalmente.'))
     pendingSegmentWrites.current.add(write)
     void write.finally(() => pendingSegmentWrites.current.delete(write))
   }
@@ -552,8 +590,9 @@ function HomePage() {
     setSuggestionLoading(true)
     setSuggestionError(null)
     try {
-      const response = await api.generateSuggestion(sessionId)
+      const response = await api.generateSuggestion(sessionId, contextSummary.current.value, contextSummary.current.through)
       if (requestNumber === suggestionRequest.current && latestClientSegment.current === segmentNumber && callSessionId.current === sessionId) {
+        contextSummary.current = { value: response.contextSummary, through: response.summarizedThrough }
         setSuggestions(current => [...current.filter(entry => entry.segmentNumber !== segmentNumber), { segmentNumber, suggestion: response }])
       }
     } catch (cause) {
@@ -582,61 +621,9 @@ function HomePage() {
     }
   }
 
-  function finalizePartialTranscript(source: AudioSource) {
-    const sessionId = callSessionId.current
-    if (sessionId) finalizeTranscript(source, sessionId, partialTranscriptsRef.current[source])
-  }
-
-  function startTurnDetection(stream: MediaStream, channel: RTCDataChannel) {
-    if (!window.AudioContext) {
-      setError('Este navegador não suporta detectar o fim da fala para a transcrição em tempo real.')
-      return () => {}
-    }
-    const audioContext = new AudioContext()
-    const analyser = audioContext.createAnalyser()
-    analyser.fftSize = 512
-    const source = audioContext.createMediaStreamSource(stream)
-    source.connect(analyser)
-    const samples = new Uint8Array(analyser.fftSize)
-    let timer: number | null = null
-    let speaking = false
-    let silenceStartedAt: number | null = null
-    let stopped = false
-
-    function commitTurn() {
-      if (channel.readyState === 'open') channel.send(JSON.stringify({ type: 'input_audio_buffer.commit' }))
-    }
-
-    function inspectAudio() {
-      if (stopped) return
-      analyser.getByteTimeDomainData(samples)
-      const averageSquaredAmplitude = samples.reduce((total, sample) => {
-        const normalized = (sample - 128) / 128
-        return total + normalized * normalized
-      }, 0) / samples.length
-      if (Math.sqrt(averageSquaredAmplitude) >= VOICE_RMS_THRESHOLD) {
-        speaking = true
-        silenceStartedAt = null
-      } else if (speaking) {
-        silenceStartedAt ??= performance.now()
-        if (performance.now() - silenceStartedAt >= TURN_SILENCE_MS) {
-          commitTurn()
-          speaking = false
-          silenceStartedAt = null
-        }
-      }
-      timer = window.setTimeout(inspectAudio, TURN_DETECTION_INTERVAL_MS)
-    }
-
-    void audioContext.resume().catch(() => setError('Não foi possível ativar a detecção de fala desta fonte.'))
-    inspectAudio()
-    return () => {
-      stopped = true
-      if (timer !== null) window.clearTimeout(timer)
-      source.disconnect()
-      analyser.disconnect()
-      void audioContext.close()
-    }
+  function shouldSuggest(text: string) {
+    const value = text.trim().toLocaleLowerCase()
+    return /\?$|\b(como|quando|quanto|por que|porque|qual|quais|dúvida|duvida|não consigo|nao consigo|caro|orçamento|orcamento|não temos|nao temos|how|when|what|why|price|expensive|budget|not sure)\b/.test(value)
   }
 
   function tabTitleFrom(stream: MediaStream) {
@@ -673,36 +660,69 @@ function HomePage() {
     }
   }
 
-  async function connectSource(source: AudioSource, stream: MediaStream, session: { sessionId: string; clientSecret: string }) {
-    const connection = new RTCPeerConnection()
-    sourceCaptures.current[source] = { stream, connection, stopTurnDetection: () => {} }
-    stream.getAudioTracks().forEach(track => connection.addTrack(track, stream))
-    const channel = connection.createDataChannel(`oai-${source}-events`)
-    channel.onmessage = event => receiveTranscript(source, session.sessionId, event.data)
-    const activateTurnDetection = () => {
-      const capture = sourceCaptures.current[source]
-      if (capture?.stream !== stream) return
-      capture.stopTurnDetection()
-      capture.stopTurnDetection = startTurnDetection(stream, channel)
+  function startAudioChunk(source: AudioSource, sessionId: string, capture: SourceCapture) {
+    if (sourceCaptures.current[source] !== capture) return
+    const recorder = new MediaRecorder(capture.audioStream, { mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 64000 })
+    let finishRecording: () => void = () => undefined
+    capture.hasAudibleSignal = !capture.usesAudioActivityDetection
+    capture.recorder = recorder
+    capture.stopCompletion = new Promise(resolve => { finishRecording = resolve })
+    recorder.ondataavailable = event => {
+      if (capture.hasAudibleSignal) receiveAudioChunk(source, sessionId, event.data)
     }
-    channel.onopen = activateTurnDetection
+    recorder.onstop = () => {
+      if (capture.recorder === recorder) {
+        capture.recorder = null
+        capture.rotationTimer = null
+      }
+      finishRecording()
+      if (sourceCaptures.current[source] === capture) startAudioChunk(source, sessionId, capture)
+    }
+    recorder.start()
+    capture.rotationTimer = window.setTimeout(() => {
+      if (capture.recorder === recorder && recorder.state !== 'inactive') recorder.stop()
+    }, AUDIO_CHUNK_DURATION_MS)
+  }
+
+  function observeAudioActivity(capture: SourceCapture) {
+    try {
+      const audioContext = new AudioContext()
+      const analyser = audioContext.createAnalyser()
+      analyser.fftSize = 1024
+      const samples = new Uint8Array(analyser.fftSize)
+      audioContext.createMediaStreamSource(capture.audioStream).connect(analyser)
+      capture.audioContext = audioContext
+      capture.usesAudioActivityDetection = true
+      const sample = () => {
+        analyser.getByteTimeDomainData(samples)
+        const rms = Math.sqrt(samples.reduce((sum, value) => sum + (value - 128) ** 2, 0) / samples.length)
+        if (rms >= SPEECH_RMS_THRESHOLD) capture.hasAudibleSignal = true
+      }
+      sample()
+      capture.audioActivityTimer = window.setInterval(sample, AUDIO_ACTIVITY_SAMPLE_MS)
+      void audioContext.resume().catch(() => undefined)
+    } catch {
+      // Browsers without Web Audio support keep the capture path available.
+    }
+  }
+
+  async function connectSource(source: AudioSource, stream: MediaStream, session: { sessionId: string }) {
+    const capture: SourceCapture = { stream, audioStream: new MediaStream(stream.getAudioTracks()), recorder: null, rotationTimer: null, stopCompletion: null, audioContext: null, audioActivityTimer: null, usesAudioActivityDetection: false, hasAudibleSignal: true }
+    sourceCaptures.current[source] = capture
     stream.getTracks().forEach(track => track.addEventListener('ended', () => {
       if (sourceCaptures.current[source]?.stream === stream) {
         void stopSource(source, source === 'tab' ? 'O compartilhamento de áudio da aba foi interrompido.' : 'O microfone foi interrompido.')
       }
     }))
-    const offer = await connection.createOffer()
-    await connection.setLocalDescription(offer)
-    const response = await fetch('https://api.openai.com/v1/realtime/calls', { method: 'POST', headers: { Authorization: `Bearer ${session.clientSecret}`, 'Content-Type': 'application/sdp' }, body: offer.sdp })
-    if (!response.ok) throw new RealtimeConnectionError(response.status)
-    await connection.setRemoteDescription({ type: 'answer', sdp: await response.text() })
-    if (channel.readyState === 'open') activateTurnDetection()
+    observeAudioActivity(capture)
+    startAudioChunk(source, session.sessionId, capture)
     setSourceListening(source, true)
     setIsCallActive(true)
   }
 
   async function startMicrophone() {
-    if (!window.navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) { setError('Este navegador não suporta a captura de microfone em tempo real.'); return }
+    if (!preparationConfirmed.current && !callSessionId.current) { pendingStartSource.current = 'microphone'; setPreparationOpen(true); return }
+    if (!window.navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { setError('Este navegador não suporta a captura de microfone.'); return }
     let stream: MediaStream | null = null
     try {
       setError(null)
@@ -710,7 +730,7 @@ function HomePage() {
       const session = await ensureSession()
       await connectSource('microphone', stream, session)
     } catch (cause) {
-      releaseSource('microphone')
+      await releaseSource('microphone')
       stream?.getTracks().forEach(track => track.stop())
       await abortSessionIfUnused()
       setError(captureErrorMessage(cause, 'microphone'))
@@ -718,7 +738,8 @@ function HomePage() {
   }
 
   async function startTabAudio() {
-    if (!window.navigator.mediaDevices?.getDisplayMedia || !window.RTCPeerConnection) { setError('Este navegador não suporta compartilhar áudio de uma aba ou janela.'); return }
+    if (!preparationConfirmed.current && !callSessionId.current) { pendingStartSource.current = 'tab'; setPreparationOpen(true); return }
+    if (!window.navigator.mediaDevices?.getDisplayMedia || !window.MediaRecorder) { setError('Este navegador não suporta compartilhar áudio de uma aba ou janela.'); return }
     let stream: MediaStream | null = null
     try {
       setError(null)
@@ -733,7 +754,7 @@ function HomePage() {
       suggestFirstTabTitle(session.sessionId, tabTitleFrom(stream))
       await connectSource('tab', stream, session)
     } catch (cause) {
-      releaseSource('tab')
+      await releaseSource('tab')
       stream?.getTracks().forEach(track => track.stop())
       await abortSessionIfUnused()
       setError(captureErrorMessage(cause, 'tab'))
@@ -753,6 +774,16 @@ function HomePage() {
   async function toggleCall() {
     if (isCallActive) await endCall()
     else await startMicrophone()
+  }
+
+  function startWithPreparation(meetingContext: string, knowledgeBaseId: string | undefined) {
+    preparation.current = { meetingContext: meetingContext.trim() || undefined, knowledgeBaseId }
+    preparationConfirmed.current = true
+    setPreparationOpen(false)
+    const source = pendingStartSource.current
+    pendingStartSource.current = null
+    if (source === 'tab') void startTabAudio()
+    else void startMicrophone()
   }
 
   if (!account) return <div className="loading-page" role="status">{error ?? 'Carregando seu espaço…'}</div>
@@ -781,7 +812,7 @@ function HomePage() {
         <button type="button" className={`icon-control ${tabAudioOn ? 'is-on' : ''}`} aria-label={tabAudioOn ? 'Parar de escutar áudio da aba' : 'Escutar áudio da aba'} aria-pressed={tabAudioOn} onClick={() => void toggleTabAudio()}><Icon name="tabAudio" /></button>
         <button type="button" className="suggest-button" disabled={!latestClientSegment.current || suggestionLoading} onClick={regenerateSuggestion}><Icon name="sparkles" />Sugerir agora</button>
         <button type="button" className={`end-button ${isCallActive ? '' : 'restart-button'}`} onClick={() => void toggleCall()}><Icon name="phone" />{isCallActive ? 'Encerrar call' : 'Iniciar call'}</button>
-        <div className="settings-wrap"><button type="button" className="icon-control" aria-label="Abrir configurações da call" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(value => !value)}><Icon name="settings" /></button>{settingsOpen && <div className="settings-popover"><strong>Privacidade da call</strong><span>O áudio serve apenas à transcrição em tempo real; o Orientador mantém somente o texto final.</span><button type="button" className="logout-button" onClick={logout}>Sair da conta <span aria-hidden="true">↗</span></button></div>}</div>
+        <div className="settings-wrap"><button type="button" className="icon-control" aria-label="Abrir configurações da call" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(value => !value)}><Icon name="settings" /></button>{settingsOpen && <div className="settings-popover"><strong>Privacidade da call</strong><span>O áudio serve apenas à transcrição em tempo real; o Orientador mantém somente o texto final.</span><button type="button" className="settings-link" onClick={() => { setSettingsOpen(false); setKnowledgeBasesOpen(true) }}>Bases de conhecimento</button><button type="button" className="logout-button" onClick={logout}>Sair da conta <span aria-hidden="true">↗</span></button></div>}</div>
       </div>
     </header>
 
@@ -823,6 +854,8 @@ function HomePage() {
     </main>
     <div className="call-bottom-note">Microfone e áudio compartilhado são transcritos de forma independente. O Orientador salva somente o texto final.</div>
     {profileOpen && <ProfileDialog account={account} onClose={() => setProfileOpen(false)} onAccountChange={setAccount} />}
+    {knowledgeBasesOpen && <KnowledgeBasesDialog account={account} onClose={() => setKnowledgeBasesOpen(false)} />}
+    {preparationOpen && <PreparationDialog onStart={startWithPreparation} />}
   </div>
 }
 

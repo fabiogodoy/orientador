@@ -7,6 +7,7 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.io.InputStream;
 import java.util.UUID;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -22,24 +23,26 @@ public class CallService {
     private static final Logger log = LoggerFactory.getLogger(CallService.class);
     private final JdbcTemplate jdbc;
     private final AccountService accounts;
-    private final OpenAiRealtimeClient realtime;
+    private final GroqTranscriptionClient transcriptions;
     private final CallSuggestionGenerator suggestions;
+    private final KnowledgeBaseService knowledgeBases;
     private final MeetingAnalysisGenerator analyses;
     private final ObjectMapper mapper;
     private final Clock clock;
-    CallService(JdbcTemplate jdbc, AccountService accounts, OpenAiRealtimeClient realtime, CallSuggestionGenerator suggestions, MeetingAnalysisGenerator analyses, Clock clock) {
-        this.jdbc = jdbc; this.accounts = accounts; this.realtime = realtime; this.suggestions = suggestions; this.analyses = analyses; this.clock = clock; this.mapper = new ObjectMapper();
+    CallService(JdbcTemplate jdbc, AccountService accounts, GroqTranscriptionClient transcriptions, CallSuggestionGenerator suggestions, KnowledgeBaseService knowledgeBases, MeetingAnalysisGenerator analyses, Clock clock) {
+        this.jdbc = jdbc; this.accounts = accounts; this.transcriptions = transcriptions; this.suggestions = suggestions; this.knowledgeBases = knowledgeBases; this.analyses = analyses; this.clock = clock; this.mapper = new ObjectMapper();
     }
 
     @Transactional
-    CallSessionResponse start(UUID userId, String requestedTitle) {
+    CallSessionResponse start(UUID userId, String requestedTitle, String requestedContext, UUID knowledgeBaseId) {
         Identity identity = accounts.currentIdentity(userId);
         UUID id = UUID.randomUUID(); Instant now = clock.instant();
         String title = normalizeTitle(requestedTitle);
-        jdbc.update("insert into call_sessions (id, tenant_id, user_id, title, status, started_at) values (?, ?, ?, ?, 'ACTIVE', ?)", id, identity.tenantId(), identity.id(), title, Timestamp.from(now));
-        CallSessionResponse response = new CallSessionResponse(id, realtime.createClientSecret(identity.id()), title);
-        log.info("Realtime transcription started callId={} tenantId={}", id, identity.tenantId());
-        return response;
+        String context = normalizeOptional(requestedContext);
+        KnowledgeBaseService.KnowledgeBaseSnapshot base = knowledgeBaseId == null ? null : knowledgeBases.snapshot(identity, knowledgeBaseId);
+        jdbc.update("insert into call_sessions (id, tenant_id, user_id, title, meeting_context, knowledge_base_name, knowledge_base_content, status, started_at) values (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)", id, identity.tenantId(), identity.id(), title, context, base == null ? null : base.name(), base == null ? null : base.content(), Timestamp.from(now));
+        log.info("Chunk transcription started callId={} tenantId={} hasMeetingContext={} hasKnowledgeBase={}", id, identity.tenantId(), context != null, base != null);
+        return new CallSessionResponse(id, title);
     }
 
     @Transactional
@@ -56,11 +59,23 @@ public class CallService {
         return currentTitle;
     }
 
-    TranscriptionSecretResponse createTranscriptionSecret(UUID userId, UUID sessionId) {
+    TranscribedSegmentResponse transcribe(UUID userId, UUID sessionId, CaptureSource source, int sequenceNumber, InputStream input) throws java.io.IOException {
+        long startedAt = System.nanoTime();
+        if (sequenceNumber < 1) throw new InvalidAudioChunkException();
         Identity identity = accounts.currentIdentity(userId);
         Integer active = jdbc.queryForObject("select count(*) from call_sessions where id=? and tenant_id=? and user_id=? and status='ACTIVE'", Integer.class, sessionId, identity.tenantId(), identity.id());
         if (active == null || active != 1) throw new CallNotFoundException();
-        return new TranscriptionSecretResponse(realtime.createClientSecret(identity.id()));
+        byte[] audio = input.readNBytes(2 * 1024 * 1024 + 1);
+        if (audio.length == 0 || audio.length > 2 * 1024 * 1024) throw new InvalidAudioChunkException();
+        try {
+            String text = transcriptions.transcribe(audio);
+            append(userId, sessionId, new TranscriptSegmentRequest(sequenceNumber, text, source.speaker()));
+            log.info("Audio chunk transcribed callId={} tenantId={} source={} sequenceNumber={} durationMs={}", sessionId, identity.tenantId(), source, sequenceNumber, elapsedMillis(startedAt));
+            return new TranscribedSegmentResponse(sequenceNumber, source.speaker(), text);
+        } catch (RuntimeException exception) {
+            log.warn("Audio chunk transcription failed callId={} tenantId={} source={} sequenceNumber={} durationMs={} reason={}", sessionId, identity.tenantId(), source, sequenceNumber, elapsedMillis(startedAt), exception.getClass().getSimpleName());
+            throw exception;
+        }
     }
 
     @Transactional
@@ -71,17 +86,19 @@ public class CallService {
         log.info("Realtime transcript segment persisted callId={} tenantId={} sequenceNumber={} speaker={}", sessionId, identity.tenantId(), request.sequenceNumber(), request.speaker());
     }
 
-    CallSuggestionResponse suggest(UUID userId, UUID sessionId) {
+    CallSuggestionResponse suggest(UUID userId, UUID sessionId, CallSuggestionRequest request) {
         Identity identity = accounts.currentIdentity(userId);
         Integer active = jdbc.queryForObject("select count(*) from call_sessions where id=? and tenant_id=? and user_id=? and status='ACTIVE'", Integer.class,
                 sessionId, identity.tenantId(), identity.id());
         if (active == null || active != 1) throw new CallNotFoundException();
-        List<SuggestionContextSegment> segments = jdbc.query("select sequence_number, speaker, text from transcript_segments where call_session_id=? and tenant_id=? order by sequence_number",
-                (resultSet, rowNumber) -> new SuggestionContextSegment(resultSet.getInt("sequence_number"), TranscriptSpeaker.valueOf(resultSet.getString("speaker")), resultSet.getString("text")), sessionId, identity.tenantId());
-        if (segments.stream().noneMatch(segment -> segment.speaker() == TranscriptSpeaker.CLIENT)) throw new SuggestionContextUnavailableException();
+        List<SuggestionContextSegment> segments = jdbc.query("select sequence_number, speaker, text from transcript_segments where call_session_id=? and tenant_id=? and sequence_number>? order by sequence_number",
+                (resultSet, rowNumber) -> new SuggestionContextSegment(resultSet.getInt("sequence_number"), TranscriptSpeaker.valueOf(resultSet.getString("speaker")), resultSet.getString("text")), sessionId, identity.tenantId(), request.summarizedThrough());
+        Integer clients = jdbc.queryForObject("select count(*) from transcript_segments where call_session_id=? and tenant_id=? and speaker='CLIENT'", Integer.class, sessionId, identity.tenantId());
+        if (clients == null || clients == 0) throw new SuggestionContextUnavailableException();
+        Integer through = jdbc.queryForObject("select coalesce(max(sequence_number), 0) from transcript_segments where call_session_id=? and tenant_id=?", Integer.class, sessionId, identity.tenantId());
         long startedAt = System.nanoTime();
         try {
-            CallSuggestionResponse suggestion = suggestions.generate(identity.id(), List.copyOf(segments));
+            CallSuggestionResponse suggestion = suggestions.generate(identity.id(), request.contextSummary(), preparationFor(sessionId, identity.tenantId()), List.copyOf(segments), through == null ? 0 : through);
             log.info("Suggestion generated callId={} tenantId={} durationMs={} segmentCount={}", sessionId, identity.tenantId(), (System.nanoTime() - startedAt) / 1_000_000, segments.size());
             return suggestion;
         } catch (OpenAiSuggestionClient.SuggestionUnavailableException exception) {
@@ -174,6 +191,12 @@ public class CallService {
         return jdbc.queryForObject("select tenant_id from call_sessions where id=?", UUID.class, sessionId);
     }
 
+    private CallPreparation preparationFor(UUID sessionId, UUID tenantId) {
+        CallPreparation preparation = jdbc.query("select meeting_context, knowledge_base_name, knowledge_base_content from call_sessions where id=? and tenant_id=?",
+                rs -> rs.next() ? new CallPreparation(rs.getString("meeting_context"), rs.getString("knowledge_base_name"), rs.getString("knowledge_base_content")) : CallPreparation.empty(), sessionId, tenantId);
+        return preparation == null ? CallPreparation.empty() : preparation;
+    }
+
     private static CallHistoryItem historyItem(UUID id, String title, Instant startedAt, Instant endedAt, UUID ownerId, String ownerName) {
         return new CallHistoryItem(id, title, startedAt, endedAt, endedAt.getEpochSecond() - startedAt.getEpochSecond(), ownerId, ownerName);
     }
@@ -207,6 +230,9 @@ public class CallService {
         String normalized = title.trim();
         return normalized.isEmpty() ? FALLBACK_TITLE : normalized;
     }
+    private static String normalizeOptional(String value) { return value == null || value.trim().isEmpty() ? null : value.trim(); }
+    private static long elapsedMillis(long startedAt) { return (System.nanoTime() - startedAt) / 1_000_000; }
     public static class CallNotFoundException extends RuntimeException {}
+    public static class InvalidAudioChunkException extends RuntimeException {}
     public static class SuggestionContextUnavailableException extends RuntimeException {}
 }
