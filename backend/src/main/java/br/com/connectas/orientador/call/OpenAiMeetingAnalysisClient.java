@@ -61,7 +61,16 @@ class OpenAiMeetingAnalysisClient implements MeetingAnalysisGenerator {
         for (SuggestionContextSegment segment : segments) value.append("<fala sequencia=\"").append(segment.sequenceNumber()).append("\">\n").append(segment.text()).append("\n</fala>\n");
         return value.append("</transcricao>").toString();
     }
-    private String extract(String body) throws Exception { JsonNode root = mapper.readTree(body); if (!root.path("output_text").asText().isBlank()) return root.path("output_text").asText(); throw new IllegalArgumentException(); }
+    private String extract(String body) throws Exception {
+        JsonNode root = mapper.readTree(body);
+        String outputText = root.path("output_text").asText();
+        if (!outputText.isBlank()) return outputText;
+        for (JsonNode output : root.path("output")) for (JsonNode content : output.path("content")) {
+            String text = content.path("text").asText();
+            if (!text.isBlank()) return text;
+        }
+        throw new IllegalArgumentException("OpenAI response has no structured output");
+    }
     private static void validate(MeetingAnalysis value) {
         if (value == null || blank(value.overview()) || blank(value.temperatureReason()) || !List.of("POSITIVA", "NEUTRA", "TENSA").contains(value.temperature())
                 || anyBlank(value.decisions()) || anyBlank(value.nextSteps()) || anyBlank(value.risks()) || anyBlank(value.keyPoints()) || anyBlank(value.participants())) throw new MeetingAnalysisUnavailableException();

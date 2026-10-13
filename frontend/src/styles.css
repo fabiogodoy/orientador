@@ -237,6 +237,15 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .back-link { display: inline-block; margin-bottom: 26px; color: #23816d; font-size: .78rem; font-weight: 800; text-decoration: none; }
 .meeting-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 15px 0 30px; }
 .meeting-meta span { padding: 7px 9px; border-radius: 8px; color: #688187; background: #e8f2ef; font-size: .74rem; font-weight: 750; }
+.meeting-analysis { display: grid; gap: 12px; margin: 0 0 22px; padding: 22px; border: 1px solid #cfe6df; border-radius: 17px; color: #315560; background: linear-gradient(135deg, #f5fffb, #fff); box-shadow: 0 10px 26px #1f575e0a; }
+.meeting-analysis .panel-kicker { color: #198a7a; font-size: .7rem; font-weight: 850; letter-spacing: .06em; }
+.meeting-analysis h2, .meeting-analysis h3, .meeting-analysis p { margin: 0; }
+.meeting-analysis h2 { color: #173f4b; font-size: 1.15rem; }
+.meeting-analysis h3 { margin-top: 4px; color: #42636b; font-size: .78rem; font-weight: 850; }
+.meeting-analysis p, .meeting-analysis li { color: #5c747b; line-height: 1.5; }
+.meeting-analysis ul { display: grid; gap: 5px; margin: 0; padding-left: 20px; }
+.meeting-analysis-retry { justify-self: start; padding: 10px 15px; border: 1px solid #168b77; border-radius: 9px; color: #fff; background: #168b77; font: inherit; font-size: .82rem; font-weight: 800; box-shadow: 0 7px 16px #168b7730; transition: background .2s, transform .2s; }
+.meeting-analysis-retry:hover { background: #117363; transform: translateY(-1px); }
 .history-transcript { border: 1px solid #dce9e5; border-radius: 17px; background: #fff; overflow: hidden; }
 .history-transcript header { padding: 20px 22px; border-bottom: 1px solid #e7efec; }
 .history-transcript h2 { margin: 7px 0 0; font-size: 1.06rem; }
