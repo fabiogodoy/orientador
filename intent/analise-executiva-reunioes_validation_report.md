@@ -35,7 +35,9 @@ Backend executado em teste de integração local com Spring Boot e PostgreSQL ef
 * Branch de entrega: `codex/analise-executiva-reunioes`.
 * `origin/main` sincronizada antes da implementação e do commit: `2bbab2669ad40a02152aaaa4fc9eabead3625060`.
 * Commit da entrega: `cd64e9c44c54e4380cfa0073be190ffad8fd02fa`, enviado a `origin/codex/analise-executiva-reunioes`.
-* Tipo de integração e SHA final de `main`: registrados após o merge nesta mesma entrega.
+* Tipo de integração: fast-forward.
+* SHA da `main` resultante da integração: `a14a61a59f9f391812d6527ebb881b0c9c58dd20`.
+* Publicação: `git push origin main` concluído com sucesso.
 
 ## Pendências e débito técnico
 
