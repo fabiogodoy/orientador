@@ -24,6 +24,10 @@ class CallController {
     CallHistoryDetail detail(Authentication auth, @PathVariable UUID sessionId) {
         return calls.detail(((SessionPrincipal) auth.getPrincipal()).userId(), sessionId);
     }
+    @PostMapping("/{sessionId}/executive-analysis")
+    MeetingAnalysisState executiveAnalysis(Authentication auth, @PathVariable UUID sessionId) {
+        return calls.generateExecutiveAnalysis(((SessionPrincipal) auth.getPrincipal()).userId(), sessionId);
+    }
     @PostMapping("/{sessionId}/transcription-secret")
     TranscriptionSecretResponse transcriptionSecret(Authentication auth, @PathVariable UUID sessionId) { return calls.createTranscriptionSecret(((SessionPrincipal) auth.getPrincipal()).userId(), sessionId); }
     @PostMapping("/{sessionId}/segments") @ResponseStatus(HttpStatus.NO_CONTENT)

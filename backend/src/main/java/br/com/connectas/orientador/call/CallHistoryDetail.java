@@ -6,4 +6,4 @@ import java.util.UUID;
 
 public record CallHistoryDetail(UUID sessionId, String title, Instant startedAt, Instant endedAt,
                                 long durationSeconds, UUID ownerId, String ownerName,
-                                List<TranscriptHistorySegment> segments) {}
+                                List<TranscriptHistorySegment> segments, MeetingAnalysisState analysis) {}

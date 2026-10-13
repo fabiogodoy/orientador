@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,9 +24,11 @@ public class CallService {
     private final AccountService accounts;
     private final OpenAiRealtimeClient realtime;
     private final CallSuggestionGenerator suggestions;
+    private final MeetingAnalysisGenerator analyses;
+    private final ObjectMapper mapper;
     private final Clock clock;
-    CallService(JdbcTemplate jdbc, AccountService accounts, OpenAiRealtimeClient realtime, CallSuggestionGenerator suggestions, Clock clock) {
-        this.jdbc = jdbc; this.accounts = accounts; this.realtime = realtime; this.suggestions = suggestions; this.clock = clock;
+    CallService(JdbcTemplate jdbc, AccountService accounts, OpenAiRealtimeClient realtime, CallSuggestionGenerator suggestions, MeetingAnalysisGenerator analyses, Clock clock) {
+        this.jdbc = jdbc; this.accounts = accounts; this.realtime = realtime; this.suggestions = suggestions; this.analyses = analyses; this.clock = clock; this.mapper = new ObjectMapper();
     }
 
     @Transactional
@@ -129,7 +132,42 @@ public class CallService {
                         resultSet.getTimestamp("finalized_at").toInstant()), sessionId, viewer.role() == Role.PLATFORM_ADMIN ? tenantFor(call.sessionId()) : viewer.tenantId());
         log.info("Call history detail viewed viewerId={} tenantId={} role={} callId={}", viewer.id(), viewer.tenantId(), viewer.role(), sessionId);
         return new CallHistoryDetail(call.sessionId(), call.title(), call.startedAt(), call.endedAt(), call.durationSeconds(),
-                call.ownerId(), call.ownerName(), List.copyOf(segments));
+                call.ownerId(), call.ownerName(), List.copyOf(segments), analysisFor(sessionId, viewer.role() == Role.PLATFORM_ADMIN ? tenantFor(call.sessionId()) : viewer.tenantId()));
+    }
+
+    MeetingAnalysisState generateExecutiveAnalysis(UUID userId, UUID sessionId) {
+        Identity viewer = accounts.currentIdentity(userId);
+        CallHistoryDetail detail = detail(userId, sessionId);
+        UUID tenantId = viewer.role() == Role.PLATFORM_ADMIN ? tenantFor(sessionId) : viewer.tenantId();
+        MeetingAnalysisState current = analysisFor(sessionId, tenantId);
+        if (current.status() == MeetingAnalysisStatus.COMPLETED || current.status() == MeetingAnalysisStatus.GENERATING) return current;
+        Instant now = clock.instant();
+        int claimed = current.status() == MeetingAnalysisStatus.ABSENT
+                ? jdbc.update("insert into meeting_executive_analyses (call_session_id, tenant_id, status, created_at, updated_at) values (?, ?, 'GENERATING', ?, ?) on conflict (call_session_id) do nothing", sessionId, tenantId, Timestamp.from(now), Timestamp.from(now))
+                : jdbc.update("update meeting_executive_analyses set status='GENERATING', updated_at=?, failed_at=null where call_session_id=? and tenant_id=? and status='FAILED'", Timestamp.from(now), sessionId, tenantId);
+        if (claimed != 1) return analysisFor(sessionId, tenantId);
+        List<SuggestionContextSegment> segments = jdbc.query("select sequence_number, speaker, text from transcript_segments where call_session_id=? and tenant_id=? order by sequence_number", (rs, row) -> new SuggestionContextSegment(rs.getInt("sequence_number"), TranscriptSpeaker.valueOf(rs.getString("speaker")), rs.getString("text")), sessionId, tenantId);
+        long startedAt = System.nanoTime();
+        log.info("Executive analysis started callId={} tenantId={} segmentCount={}", sessionId, tenantId, segments.size());
+        try {
+            MeetingAnalysis analysis = analyses.generate(viewer.id(), List.copyOf(segments));
+            jdbc.update("update meeting_executive_analyses set status='COMPLETED', analysis=cast(? as jsonb), updated_at=? where call_session_id=? and tenant_id=?", mapper.writeValueAsString(analysis), Timestamp.from(clock.instant()), sessionId, tenantId);
+            log.info("Executive analysis completed callId={} tenantId={} durationMs={} segmentCount={}", sessionId, tenantId, (System.nanoTime() - startedAt) / 1_000_000, segments.size());
+        } catch (Exception exception) {
+            jdbc.update("update meeting_executive_analyses set status='FAILED', updated_at=?, failed_at=? where call_session_id=? and tenant_id=?", Timestamp.from(clock.instant()), Timestamp.from(clock.instant()), sessionId, tenantId);
+            log.warn("Executive analysis failed callId={} tenantId={} durationMs={} reason={}", sessionId, tenantId, (System.nanoTime() - startedAt) / 1_000_000, exception.getClass().getSimpleName());
+        }
+        return analysisFor(sessionId, tenantId);
+    }
+
+    private MeetingAnalysisState analysisFor(UUID sessionId, UUID tenantId) {
+        return jdbc.query("select status, analysis::text as analysis from meeting_executive_analyses where call_session_id=? and tenant_id=?", rs -> {
+            if (!rs.next()) return MeetingAnalysisState.absent();
+            MeetingAnalysisStatus status = MeetingAnalysisStatus.valueOf(rs.getString("status"));
+            if (status != MeetingAnalysisStatus.COMPLETED) return new MeetingAnalysisState(status, null);
+            try { return new MeetingAnalysisState(status, mapper.readValue(rs.getString("analysis"), MeetingAnalysis.class)); }
+            catch (Exception exception) { throw new IllegalStateException("Stored meeting analysis is invalid", exception); }
+        }, sessionId, tenantId);
     }
 
     private UUID tenantFor(UUID sessionId) {

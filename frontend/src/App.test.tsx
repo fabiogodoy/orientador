@@ -375,7 +375,7 @@ describe('histórico de reuniões', () => {
     vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/api/auth/me')) return Promise.resolve(new Response(JSON.stringify(account), { status: 200 }))
-      return Promise.resolve(new Response(JSON.stringify({ sessionId: 'meeting-1', title: 'Discovery Orbit', startedAt: '2026-10-12T13:00:00Z', endedAt: '2026-10-12T13:42:00Z', durationSeconds: 2520, ownerId: 'user-2', ownerName: 'Rafael Costa', segments: [
+      return Promise.resolve(new Response(JSON.stringify({ sessionId: 'meeting-1', title: 'Discovery Orbit', startedAt: '2026-10-12T13:00:00Z', endedAt: '2026-10-12T13:42:00Z', durationSeconds: 2520, ownerId: 'user-2', ownerName: 'Rafael Costa', analysis: { status: 'COMPLETED', analysis: { overview: 'A conversa apresentou o processo.', decisions: ['Agendar retorno'], nextSteps: ['Enviar proposta'], risks: ['Prazo'], keyPoints: ['Necessidade clara'], participants: ['Rafael'], temperature: 'POSITIVA', temperatureReason: 'Tom colaborativo.' } }, segments: [
         { sequenceNumber: 1, speaker: 'USER', text: 'Olá, obrigado pelo tempo.', finalizedAt: '2026-10-12T13:01:00Z' },
         { sequenceNumber: 2, speaker: 'CLIENT', text: 'Quero entender o processo.', finalizedAt: '2026-10-12T13:02:00Z' },
       ] }), { status: 200 }))
@@ -385,6 +385,8 @@ describe('histórico de reuniões', () => {
     expect(await screen.findByRole('heading', { name: 'Discovery Orbit' })).toBeInTheDocument()
     expect(screen.getByText('Olá, obrigado pelo tempo.')).toBeInTheDocument()
     expect(screen.getByText('Quero entender o processo.')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Resumo executivo' })).toBeInTheDocument()
+    expect(screen.getByText('Participantes')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Escutar microfone' })).not.toBeInTheDocument()
     expect(screen.queryByText('Sugerir agora')).not.toBeInTheDocument()
   })

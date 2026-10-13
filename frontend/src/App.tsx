@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import logoUrl from '../../assets/brand/orientador-logo.svg'
 import logoLightUrl from '../../assets/brand/orientador-logo-light.svg'
 import termsMarkdown from '../../docs/legal/termos-de-uso.md?raw'
-import { api, ApiError, TERMS_VERSION, type Account, type AccountType, type CallHistoryDetail, type CallHistoryItem, type CallHistoryPage, type CallSuggestion } from './api'
+import { api, ApiError, TERMS_VERSION, type Account, type AccountType, type CallHistoryDetail, type CallHistoryItem, type CallHistoryPage, type CallSuggestion, type MeetingAnalysisState } from './api'
 
 const routes = {
   home: '/app/',
@@ -847,17 +847,40 @@ function MeetingDetailPage({ sessionId }: { sessionId: string }) {
   const [account, setAccount] = useState<Account | null>(null)
   const [meeting, setMeeting] = useState<CallHistoryDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
   useEffect(() => { api.me().then(setAccount).catch(() => window.location.replace(routes.login)) }, [])
   useEffect(() => {
     if (!account) return
-    api.callHistoryDetail(sessionId).then(setMeeting).catch(() => setError('Esta reunião não está disponível.'))
+    api.callHistoryDetail(sessionId).then(detail => {
+      const analysis = detail.analysis ?? { status: 'ABSENT' as const, analysis: null }
+      setMeeting({ ...detail, analysis })
+      if (analysis.status === 'ABSENT') generateAnalysis()
+    }).catch(() => setError('Esta reunião não está disponível.'))
   }, [account, sessionId])
+  function generateAnalysis() {
+    setAnalysisError(null)
+    setMeeting(current => current ? { ...current, analysis: { status: 'GENERATING', analysis: null } } : current)
+    api.generateExecutiveAnalysis(sessionId).then(analysis => setMeeting(current => current ? { ...current, analysis } : current)).catch(() => {
+      setAnalysisError('Não foi possível gerar a análise. Tente novamente.')
+      setMeeting(current => current ? { ...current, analysis: { status: 'FAILED', analysis: null } } : current)
+    })
+  }
   if (!account) return <div className="loading-page" role="status">Carregando reunião…</div>
   return <div className="history-page"><HistoryHeader account={account} /><main className="history-main detail-main"><a className="back-link" href={routes.meetings}>← Todas as reuniões</a><ErrorNotice message={error} />
     {!meeting && !error && <p className="history-state" role="status">Carregando transcrição…</p>}
-    {meeting && <><span className="eyebrow">REUNIÃO ENCERRADA</span><h1>{meeting.title}</h1><div className="meeting-meta"><span>{formatDateTime(meeting.startedAt)}</span><span>{formatDuration(meeting.durationSeconds)}</span>{meeting.ownerId !== account.id && <span>Realizada por {meeting.ownerName}</span>}</div><section className="history-transcript" aria-labelledby="history-transcript-title"><header><span className="panel-kicker"><Icon name="transcript" size={17} />Transcrição</span><h2 id="history-transcript-title">A conversa registrada</h2></header>{meeting.segments.length === 0 ? <p className="history-state">Esta reunião foi encerrada sem transcrição final.</p> : meeting.segments.map(segment => <article className={`history-segment ${segment.speaker === 'USER' ? 'from-user' : 'from-client'}`} key={segment.sequenceNumber}><small>{segment.speaker === 'USER' ? meeting.ownerName : 'Cliente'} · {formatDateTime(segment.finalizedAt)}</small><p>{segment.text}</p></article>)}</section></>}
+    {meeting && <><span className="eyebrow">REUNIÃO ENCERRADA</span><h1>{meeting.title}</h1><div className="meeting-meta"><span>{formatDateTime(meeting.startedAt)}</span><span>{formatDuration(meeting.durationSeconds)}</span>{meeting.ownerId !== account.id && <span>Realizada por {meeting.ownerName}</span>}</div><MeetingAnalysisPanel state={meeting.analysis} error={analysisError} onRetry={generateAnalysis} /><section className="history-transcript" aria-labelledby="history-transcript-title"><header><span className="panel-kicker"><Icon name="transcript" size={17} />Transcrição</span><h2 id="history-transcript-title">A conversa registrada</h2></header>{meeting.segments.length === 0 ? <p className="history-state">Esta reunião foi encerrada sem transcrição final.</p> : meeting.segments.map(segment => <article className={`history-segment ${segment.speaker === 'USER' ? 'from-user' : 'from-client'}`} key={segment.sequenceNumber}><small>{segment.speaker === 'USER' ? meeting.ownerName : 'Cliente'} · {formatDateTime(segment.finalizedAt)}</small><p>{segment.text}</p></article>)}</section></>}
   </main></div>
 }
+
+function MeetingAnalysisPanel({ state, error, onRetry }: { state: MeetingAnalysisState; error: string | null; onRetry: () => void }) {
+  if (state.status === 'ABSENT' || state.status === 'GENERATING') return <section className="meeting-analysis" aria-label="Análise gerada por IA"><span className="panel-kicker">ANÁLISE GERADA POR IA</span><p role="status">Gerando análise…</p></section>
+  if (state.status === 'FAILED') return <section className="meeting-analysis" aria-label="Análise gerada por IA"><span className="panel-kicker">ANÁLISE GERADA POR IA</span><p role="alert">{error ?? 'Não foi possível gerar a análise. Tente novamente.'}</p><button type="button" onClick={onRetry}>Tentar novamente</button></section>
+  const analysis = state.analysis!
+  const temperature = { POSITIVA: 'Positiva', NEUTRA: 'Neutra', TENSA: 'Tensa' }[analysis.temperature]
+  return <section className="meeting-analysis" aria-label="Análise gerada por IA"><span className="panel-kicker">ANÁLISE GERADA POR IA</span><h2>Resumo executivo</h2><p>{analysis.overview}</p><AnalysisList title="Decisões e acordos" items={analysis.decisions} /><AnalysisList title="Pendências e próximos passos" items={analysis.nextSteps} /><AnalysisList title="Riscos e objeções" items={analysis.risks} /><AnalysisList title="Pontos-chave" items={analysis.keyPoints} /><h3>Participantes</h3>{analysis.participants.length ? <ul>{analysis.participants.map(name => <li key={name}>{name}</li>)}</ul> : <p>Nenhum nome identificado na transcrição</p>}<h3>Temperatura: {temperature}</h3><p>{analysis.temperatureReason}</p></section>
+}
+
+function AnalysisList({ title, items }: { title: string; items: string[] }) { return <><h3>{title}</h3>{items.length ? <ul>{items.map(item => <li key={item}>{item}</li>)}</ul> : <p>Não identificado na transcrição.</p>}</> }
 
 export function App() {
   const path = window.location.pathname.replace(/\/$/, '')

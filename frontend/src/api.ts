@@ -27,7 +27,9 @@ export type CallSuggestion = { tipo: string; trechoCliente: string; proximaFala:
 export type CallHistoryItem = { sessionId: string; title: string; startedAt: string; endedAt: string; durationSeconds: number; ownerId: string; ownerName: string }
 export type CallHistoryPage = { items: CallHistoryItem[]; page: number; pageSize: number; total: number }
 export type TranscriptHistorySegment = { sequenceNumber: number; speaker: TranscriptionSpeaker; text: string; finalizedAt: string }
-export type CallHistoryDetail = CallHistoryItem & { segments: TranscriptHistorySegment[] }
+export type MeetingAnalysis = { overview: string; decisions: string[]; nextSteps: string[]; risks: string[]; keyPoints: string[]; participants: string[]; temperature: 'POSITIVA' | 'NEUTRA' | 'TENSA'; temperatureReason: string }
+export type MeetingAnalysisState = { status: 'ABSENT' | 'GENERATING' | 'COMPLETED' | 'FAILED'; analysis: MeetingAnalysis | null }
+export type CallHistoryDetail = CallHistoryItem & { segments: TranscriptHistorySegment[]; analysis: MeetingAnalysisState }
 
 const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.PROD
   ? 'https://api-orientador.connectas.com.br' : 'http://localhost:8080')
@@ -107,6 +109,7 @@ export const api = {
   startCall: (title: string) => request<CallSession>('/api/calls', 'POST', { title }),
   callHistory: (page: number) => request<CallHistoryPage>(`/api/calls?page=${page}`, 'GET'),
   callHistoryDetail: (sessionId: string) => request<CallHistoryDetail>(`/api/calls/${sessionId}`, 'GET'),
+  generateExecutiveAnalysis: (sessionId: string) => request<MeetingAnalysisState>(`/api/calls/${sessionId}/executive-analysis`, 'POST'),
   createTranscriptionSecret: (sessionId: string) => request<{ clientSecret: string }>(`/api/calls/${sessionId}/transcription-secret`, 'POST'),
   saveTranscriptSegment: (sessionId: string, sequenceNumber: number, text: string, speaker: TranscriptionSpeaker) => request<void>(`/api/calls/${sessionId}/segments`, 'POST', { sequenceNumber, text, speaker }),
   generateSuggestion: (sessionId: string) => request<CallSuggestion>(`/api/calls/${sessionId}/suggestions`, 'POST'),

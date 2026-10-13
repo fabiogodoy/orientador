@@ -30,7 +30,8 @@ class CallServiceSuggestionTest {
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
     private final OpenAiRealtimeClient realtime = mock(OpenAiRealtimeClient.class);
     private final CallSuggestionGenerator generator = mock(CallSuggestionGenerator.class);
-    private final CallService service = new CallService(jdbc, accounts, realtime, generator, Clock.fixed(Instant.EPOCH, ZoneOffset.UTC));
+    private final MeetingAnalysisGenerator analyses = mock(MeetingAnalysisGenerator.class);
+    private final CallService service = new CallService(jdbc, accounts, realtime, generator, analyses, Clock.fixed(Instant.EPOCH, ZoneOffset.UTC));
 
     @Test
     void generatesOnlyFromAuthorizedOrderedCallSegments() {
