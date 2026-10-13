@@ -12,6 +12,7 @@ const routes = {
   terms: '/app/termos',
   meetings: '/app/reunioes',
 }
+const SUGGESTION_PAUSE_MS = 1800
 
 function Brand({ light = false }: { light?: boolean }) {
   return <a className={`brand ${light ? 'brand-light' : ''}`} href={routes.home} aria-label="Orientador — início">
@@ -322,6 +323,7 @@ function HomePage() {
   const pendingSegmentWrites = useRef(new Set<Promise<void>>())
   const latestClientSegment = useRef<number | null>(null)
   const suggestionRequest = useRef(0)
+  const pendingSuggestionTimer = useRef<number | null>(null)
   const transcriptScrollRef = useRef<HTMLDivElement>(null)
   const guidanceScrollRef = useRef<HTMLDivElement>(null)
   const scrollFollowingRef = useRef(scrollFollowing)
@@ -495,6 +497,7 @@ function HomePage() {
     try {
       const message = JSON.parse(payload) as { type?: string; delta?: string; transcript?: string }
       if (message.type === 'conversation.item.input_audio_transcription.delta') {
+        if (source === 'tab') cancelScheduledSuggestion()
         setPartialTranscript(source, partialTranscriptsRef.current[source] + (message.delta ?? ''))
       }
       if (message.type === 'conversation.item.input_audio_transcription.completed' && message.transcript?.trim()) {
@@ -518,13 +521,26 @@ function HomePage() {
     const write = api.saveTranscriptSegment(sessionId, sequenceNumber, text, apiSpeakerForSource(source))
       .then(() => {
         if (source === 'tab' && callSessionId.current === sessionId) {
-          latestClientSegment.current = sequenceNumber
-          void generateSuggestion(sessionId, sequenceNumber)
+          scheduleSuggestion(sessionId, sequenceNumber)
         }
       })
       .catch(() => setError('A fala foi transcrita, mas não pôde ser salva no histórico.'))
     pendingSegmentWrites.current.add(write)
     void write.finally(() => pendingSegmentWrites.current.delete(write))
+  }
+
+  function cancelScheduledSuggestion() {
+    if (pendingSuggestionTimer.current !== null) window.clearTimeout(pendingSuggestionTimer.current)
+    pendingSuggestionTimer.current = null
+  }
+
+  function scheduleSuggestion(sessionId: string, sequenceNumber: number) {
+    latestClientSegment.current = sequenceNumber
+    cancelScheduledSuggestion()
+    pendingSuggestionTimer.current = window.setTimeout(() => {
+      pendingSuggestionTimer.current = null
+      if (latestClientSegment.current === sequenceNumber && callSessionId.current === sessionId) void generateSuggestion(sessionId, sequenceNumber)
+    }, SUGGESTION_PAUSE_MS)
   }
 
   async function waitForPendingSegments() {
