@@ -2,7 +2,7 @@
 
 ## Status
 
-**APROVADA LOCALMENTE — reintegração pendente.**
+**APROVADA — integrada e publicada em `origin/main`.**
 
 ## PRD × implementação
 
@@ -24,6 +24,9 @@
 * `scripts/governance-audit.sh` — sucesso.
 * `git diff --check` — sucesso.
 
-## Pendência de reintegração
+## Reintegração
 
-O worktree/branch atual já contém uma entrega anterior não concluída (`transcricao-e-sugestoes-economicas`) e mudanças compartilhadas em `CallService`, `App.tsx` e contratos de API. Para não violar a fronteira entre Intents, esta validação não registra commit, merge em `main` nem push. A reintegração deve ocorrer depois de concluir ou separar com segurança a entrega anterior; até lá, esta não é uma entrega publicada.
+* Branch de origem: `codex/transcricao-e-sugestoes-economicas`.
+* Base usada: `origin/main` em `b5b7194`.
+* Integração: fast-forward, sem conflito, para `main` em `8df812e`.
+* Publicação: `git push origin main` concluído; `origin/main` recebeu `8df812e`.
