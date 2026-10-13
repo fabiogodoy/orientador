@@ -19,6 +19,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class OpenAiRealtimeClient {
     private static final Logger log = LoggerFactory.getLogger(OpenAiRealtimeClient.class);
+    static final String TRANSCRIPTION_SESSION_BODY = "{\"session\":{\"type\":\"transcription\",\"audio\":{\"input\":{\"transcription\":{\"model\":\"gpt-live-transcribe\",\"languages\":[\"pt\",\"en\"],\"delay\":\"low\"},\"turn_detection\":null}}}}";
     private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private final String apiKey;
     private static final Pattern SECRET_VALUE = Pattern.compile("\\\"value\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"");
@@ -33,12 +34,11 @@ public class OpenAiRealtimeClient {
             throw new RealtimeUnavailableException();
         }
         try {
-            String body = "{\"session\":{\"type\":\"transcription\",\"audio\":{\"input\":{\"transcription\":{\"model\":\"gpt-live-transcribe\",\"languages\":[\"pt\"],\"delay\":\"low\"},\"turn_detection\":null}}}}";
             HttpRequest request = HttpRequest.newBuilder(URI.create("https://api.openai.com/v1/realtime/client_secrets"))
                     .header("Authorization", "Bearer " + apiKey)
                     .header("Content-Type", "application/json")
                     .header("OpenAI-Safety-Identifier", safetyIdentifier(userId))
-                    .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build();
+                    .POST(HttpRequest.BodyPublishers.ofString(TRANSCRIPTION_SESSION_BODY, StandardCharsets.UTF_8)).build();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() / 100 != 2) {
                 log.warn("Realtime client secret unavailable reason=provider_rejected status={}", response.statusCode());
