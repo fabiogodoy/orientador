@@ -1,8 +1,11 @@
 # Test Plan — Análise executiva de reuniões encerradas
 
-**Data:** 2026-10-13  
-**Intent:** `intent/analise-executiva-reunioes.md`  
-**PRD:** `intent/analise-executiva-reunioes_prd.md`  
+**Data:** 2026-10-13
+
+**Intent:** `intent/analise-executiva-reunioes.md`
+
+**PRD:** `intent/analise-executiva-reunioes_prd.md`
+
 **Impact:** `intent/analise-executiva-reunioes_impact.md`
 
 ## Matriz de cobertura

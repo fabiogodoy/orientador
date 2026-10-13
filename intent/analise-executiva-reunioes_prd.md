@@ -1,7 +1,9 @@
 # PRD — Análise executiva de reuniões encerradas
 
-**Status:** Aprovado  
-**Origem:** `intent/analise-executiva-reunioes.md`  
+**Status:** Aprovado
+
+**Origem:** `intent/analise-executiva-reunioes.md`
+
 **Data:** 2026-10-13
 
 ## Resumo e objetivo

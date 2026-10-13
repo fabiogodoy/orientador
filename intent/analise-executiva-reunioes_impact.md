@@ -1,7 +1,9 @@
 # Impact Analysis — Análise executiva de reuniões encerradas
 
-**Status:** Concluída  
-**Data:** 2026-10-13  
+**Status:** Concluída
+
+**Data:** 2026-10-13
+
 **Intent:** `intent/analise-executiva-reunioes.md`  
 **PRD:** `intent/analise-executiva-reunioes_prd.md`
 
