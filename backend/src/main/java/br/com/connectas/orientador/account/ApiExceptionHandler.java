@@ -80,7 +80,7 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(OpenAiSuggestionClient.SuggestionUnavailableException.class)
     ResponseEntity<Map<String, String>> suggestionUnavailable() {
-        return error(HttpStatus.SERVICE_UNAVAILABLE, "SUGGESTION_UNAVAILABLE", "Não foi possível gerar a sugestão agora. A transcrição continua normalmente.");
+        return error(HttpStatus.SERVICE_UNAVAILABLE, "SUGGESTION_UNAVAILABLE", "Não foi possível gerar a sugestão agora. Tente novamente em instantes.");
     }
 
     private static ResponseEntity<Map<String, String>> error(HttpStatus status, String code, String message) {

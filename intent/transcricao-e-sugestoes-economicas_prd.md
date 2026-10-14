@@ -10,6 +10,8 @@
 | Origem | `intent/transcricao-e-sugestoes-economicas.md` |
 | Status | Aprovado |
 
+> Atualização 2026-10-14: o teto de saída de 400 tokens em RF006/RN007 foi substituído por 1.200 tokens, conforme autorização e `sugestoes-respostas-incompletas_prd.md`. Demais regras preservadas.
+
 ## Resumo executivo
 
 O Orientador substituirá a transcrição com sessão Realtime por transcrição HTTP de blocos temporários de áudio de 15 segundos. Sugestões continuarão na API textual atual, mas só serão acionadas por pergunta/objeção reconhecida localmente ou pelo comando explícito do usuário. O contexto será comprimido em um resumo rolante, interno e efêmero.

@@ -397,6 +397,8 @@ function PreparationDialog({ onStart }: { onStart: (context: string, knowledgeBa
 function HomePage() {
   const [account, setAccount] = useState<Account | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [transcriptionErrors, setTranscriptionErrors] = useState<Record<AudioSource, string | null>>({ microphone: null, tab: null })
+  const transcriptionOutcome = useRef<Record<AudioSource, number>>({ microphone: 0, tab: 0 })
   const [isCallActive, setIsCallActive] = useState(false)
   const [microphoneOn, setMicrophoneOn] = useState(false)
   const [tabAudioOn, setTabAudioOn] = useState(false)
@@ -530,6 +532,10 @@ function HomePage() {
     suggestionRequest.current += 1
     setSuggestions([])
     setSuggestionLoading(false)
+    setSuggestionError(null)
+    setTranscriptionErrors({ microphone: null, tab: null })
+    transcriptionOutcome.current = { microphone: 0, tab: 0 }
+    cancelScheduledSuggestion()
     setIsCallActive(false)
     await waitForPendingSegments()
     if (sessionId) await api.endCall(sessionId).catch(() => setError('A captura foi encerrada localmente, mas não foi possível finalizar o histórico agora.'))
@@ -546,9 +552,14 @@ function HomePage() {
     const sessionId = callSessionId.current
     callSessionId.current = null
     latestClientSegment.current = null
+    contextSummary.current = { value: '', through: 0 }
     suggestionRequest.current += 1
     setSuggestions([])
     setSuggestionLoading(false)
+    setSuggestionError(null)
+    setTranscriptionErrors({ microphone: null, tab: null })
+    transcriptionOutcome.current = { microphone: 0, tab: 0 }
+    cancelScheduledSuggestion()
     lastCallSessionId.current = sessionId
     setIsCallActive(false)
     preparationConfirmed.current = false
@@ -595,15 +606,22 @@ function HomePage() {
     return source === 'microphone' ? 'Não foi possível acessar o microfone agora. Tente novamente.' : 'Não foi possível iniciar o áudio da aba agora. Tente novamente.'
   }
 
+  function updateTranscriptionError(source: AudioSource, sessionId: string, sequence: number, message: string | null) {
+    if (callSessionId.current !== sessionId || sequence < transcriptionOutcome.current[source]) return
+    transcriptionOutcome.current[source] = sequence
+    setTranscriptionErrors(current => ({ ...current, [source]: message }))
+  }
+
   function receiveAudioChunk(source: AudioSource, sessionId: string, audio: Blob) {
     if (!audio.size) return
     const sequenceNumber = nextSegment.current++
     const write = api.transcribeAudio(sessionId, source, sequenceNumber, audio).then(response => {
       if (callSessionId.current !== sessionId) return
+      updateTranscriptionError(source, sessionId, sequenceNumber, null)
       const speaker = speakerForSource[source]
       setLiveMessages(current => [...current, { speaker, time: formatDuration(elapsedSecondsRef.current), text: response.text, source }])
       if (source === 'tab' && shouldSuggest(response.text)) scheduleSuggestion(sessionId, sequenceNumber)
-    }).catch(cause => setError(cause instanceof ApiError ? cause.message : 'Não foi possível transcrever este bloco. A call continua normalmente.'))
+    }).catch(cause => updateTranscriptionError(source, sessionId, sequenceNumber, cause instanceof ApiError ? cause.message : 'Não foi possível transcrever este bloco. A call continua normalmente.'))
     pendingSegmentWrites.current.add(write)
     void write.finally(() => pendingSegmentWrites.current.delete(write))
   }
@@ -638,7 +656,7 @@ function HomePage() {
       }
     } catch (cause) {
       if (requestNumber === suggestionRequest.current && latestClientSegment.current === segmentNumber && callSessionId.current === sessionId) {
-        setSuggestionError(cause instanceof ApiError ? cause.message : 'Não foi possível gerar a sugestão agora. A transcrição continua normalmente.')
+        setSuggestionError(cause instanceof ApiError ? cause.message : 'Não foi possível gerar a sugestão agora. Tente novamente em instantes.')
       }
     } finally {
       if (requestNumber === suggestionRequest.current) setSuggestionLoading(false)
@@ -836,6 +854,8 @@ function HomePage() {
 
   return <AuthenticatedShell account={account} onAccountChange={setAccount}><div className="call-page">
     <ErrorNotice message={error} />
+    <ErrorNotice message={transcriptionErrors.microphone ? `Microfone: ${transcriptionErrors.microphone}` : null} />
+    <ErrorNotice message={transcriptionErrors.tab ? `Áudio da aba: ${transcriptionErrors.tab}` : null} />
     <header className="call-topbar">
       <a className="call-brand" href={routes.home} aria-label="Orientador — tela da call"><img src={logoUrl} alt="Orientador" /></a>
       <div className="call-context">
@@ -880,7 +900,7 @@ function HomePage() {
         <div className="guidance-scroll" ref={guidanceScrollRef} onScroll={() => handlePanelScroll('guidance')}>
           {!currentSuggestion && !suggestionLoading && !suggestionError && <p className="guidance-empty" role="status">Aguardando a primeira fala do cliente para orientar sua próxima resposta.</p>}
           {suggestionLoading && <p className="guidance-empty" role="status">Preparando uma sugestão para a última fala do cliente…</p>}
-          {suggestionError && <div className="guidance-empty guidance-error" role="status"><p>{suggestionError}</p><button type="button" className="subtle-button" onClick={regenerateSuggestion}>Tentar novamente</button></div>}
+          {isCallActive && suggestionError && <div className="guidance-empty guidance-error" role="status"><p>{suggestionError}</p><button type="button" className="subtle-button" onClick={regenerateSuggestion}>Tentar novamente</button></div>}
           {suggestions.map((entry, index) => <article className="suggestion-card" key={entry.segmentNumber}>
             <div className="client-quote"><span aria-hidden="true">“</span><div><small>CLIENTE DISSE</small><p>{entry.suggestion.trechoCliente}</p></div></div>
             <div className="suggestion-topline"><span className="suggestion-tag">{entry.suggestion.tipo}</span><span className="suggestion-context">{index === suggestions.length - 1 ? 'Baseada na última fala' : 'Sugestão anterior'}</span></div>

@@ -110,3 +110,7 @@ Revisar esta ADR quando ocorrer qualquer um: crescimento de calls simultâneas, 
 ## Decisão final
 
 **Aprovada.** A relação custo-benefício justifica a nova integração desde que a validação de tratamento de dados e configuração operacional seja concluída antes da publicação em produção.
+
+## Ajuste de orçamento — 2026-10-14
+
+O teto de saída passa de 400 para 1.200 tokens, com resumo interno compacto de até 1.200 caracteres e tratamento explícito de respostas incompletas, conforme `intent/sugestoes-respostas-incompletas_prd.md`, aprovado pelo usuário. Não há mudança de modelo, persistência ou integração.
