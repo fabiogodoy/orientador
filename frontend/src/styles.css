@@ -248,6 +248,11 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .meeting-analysis ul { display: grid; gap: 5px; margin: 0; padding-left: 20px; }
 .meeting-analysis-retry { justify-self: start; padding: 10px 15px; border: 1px solid #168b77; border-radius: 9px; color: #fff; background: #168b77; font: inherit; font-size: .82rem; font-weight: 800; box-shadow: 0 7px 16px #168b7730; transition: background .2s, transform .2s; }
 .meeting-analysis-retry:hover { background: #117363; transform: translateY(-1px); }
+.meeting-analysis-heading { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px; }
+.summary-export { display: grid; gap: 6px; max-width: 100%; }
+.summary-export .meeting-analysis-retry:disabled { cursor: wait; opacity: .65; transform: none; }
+.summary-export p, .summary-export-status { font-size: .8rem; }
+.summary-export-status:empty { display: none; }
 .history-transcript { border: 1px solid #dce9e5; border-radius: 17px; background: #fff; overflow: hidden; }
 .history-transcript header { padding: 20px 22px; border-bottom: 1px solid #e7efec; }
 .history-transcript h2 { margin: 7px 0 0; font-size: 1.06rem; }

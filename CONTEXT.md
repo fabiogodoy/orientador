@@ -97,16 +97,16 @@ _Evitar_: rótulo técnico da mídia como título definitivo
 _Evitar_: gravação, painel de call ativa
 
 **Análise executiva da reunião:**
-Síntese persistida e gerada por IA a partir da transcrição de uma reunião encerrada, composta por resumo executivo, participantes identificados e temperatura da reunião. Não possui edição manual.
+Síntese persistida e gerada por IA a partir da transcrição de uma reunião encerrada, composta por resumo executivo, nomes identificados e temperatura da reunião. Não possui edição manual.
 _Evitar_: avaliação manual, gravação analisada
 
 **Resumo executivo:**
 Síntese em linguagem clara da reunião que reúne visão geral, decisões ou acordos, pendências e próximos passos, riscos ou objeções e pontos-chave.
 _Evitar_: transcrição resumida, ata obrigatória
 
-**Participantes identificados:**
+**Nomes Identificados:**
 Nomes de pessoas explicitamente identificados na transcrição de uma reunião. A ausência de nomes confiáveis é registrada sem inferir identidade a partir do papel técnico do locutor.
-_Evitar_: usuário e cliente como nomes de participantes
+_Evitar_: participantes como lista de presença; usuário e cliente como nomes de pessoas
 
 **Temperatura da reunião:**
 Classificação qualitativa do clima relacional da conversa como positiva, neutra ou tensa, acompanhada de uma justificativa breve baseada em tom, colaboração, objeções e conflitos.

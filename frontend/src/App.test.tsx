@@ -531,7 +531,7 @@ describe('histórico de reuniões', () => {
     expect(screen.getByText('Olá, obrigado pelo tempo.')).toBeInTheDocument()
     expect(screen.getByText('Quero entender o processo.')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Resumo executivo' })).toBeInTheDocument()
-    expect(screen.getByText('Participantes')).toBeInTheDocument()
+    expect(screen.getByText('Nomes Identificados')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Escutar microfone' })).not.toBeInTheDocument()
     expect(screen.queryByText('Sugerir agora')).not.toBeInTheDocument()
   })
