@@ -23,6 +23,7 @@ export type Registration = {
 }
 export type CallSession = { sessionId: string; title: string }
 export type KnowledgeBase = { id: string; name: string; content: string; createdByUserId: string; updatedAt: string }
+export type KnowledgeBasePage = { items: KnowledgeBase[]; page: number; pageSize: number; total: number }
 export type CallPreparation = { meetingContext?: string; knowledgeBaseId?: string }
 export type TranscriptionSpeaker = 'USER' | 'CLIENT'
 export type CallSuggestion = { tipo: string; trechoCliente: string; proximaFala: string; pontosChave: string[]; contextSummary: string; summarizedThrough: number }
@@ -115,7 +116,13 @@ export const api = {
     csrfToken = null
   },
   startCall: (title: string, preparation: CallPreparation = {}) => request<CallSession>('/api/calls', 'POST', { title, ...preparation }),
-  knowledgeBases: () => request<KnowledgeBase[]>('/api/knowledge-bases', 'GET'),
+  knowledgeBases: async (page = 0, query = '') => {
+    const params = new URLSearchParams({ page: String(page) })
+    if (query.trim()) params.set('query', query.trim())
+    const data = await request<KnowledgeBasePage | KnowledgeBase[]>(`/api/knowledge-bases?${params}`, 'GET')
+    return Array.isArray(data) ? { items: data, page, pageSize: 20, total: data.length } : data
+  },
+  knowledgeBaseOptions: (query = '') => request<KnowledgeBase[]>(`/api/knowledge-bases/options?query=${encodeURIComponent(query.trim())}`, 'GET'),
   createKnowledgeBase: (name: string, content: string) => request<KnowledgeBase>('/api/knowledge-bases', 'POST', { name, content }),
   updateKnowledgeBase: (id: string, name: string, content: string) => request<KnowledgeBase>(`/api/knowledge-bases/${id}`, 'PUT', { name, content }),
   deleteKnowledgeBase: (id: string) => request<void>(`/api/knowledge-bases/${id}`, 'DELETE'),

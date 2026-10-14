@@ -43,6 +43,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 class AuthIntegrationTest {
     private static final Instant START = Instant.parse("2026-10-10T10:00:00Z");
     private static final Pattern TOKEN = Pattern.compile("\"token\":\"([^\"]+)\"");
+    private static final Pattern ID = Pattern.compile("\"id\":\"([^\"]+)\"");
 
     @Container
     static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:16-alpine");
@@ -240,6 +241,36 @@ class AuthIntegrationTest {
         assertEquals("Discovery final", jdbc.queryForObject("SELECT title FROM call_sessions WHERE id=?", String.class, callId));
         assertEquals(404, post("/api/calls/" + callId + "/segments", "{\"sequenceNumber\":2,\"text\":\"Não deve entrar.\",\"speaker\":\"USER\"}").statusCode());
         assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM transcript_segments WHERE call_session_id=?", Integer.class, callId));
+    }
+
+    @Test
+    void knowledgeBasesArePaginatedSearchableAndLogicallyDeletedWithActor() throws Exception {
+        String email = uniqueEmail();
+        register(email, "INDIVIDUAL", null, true, AccountService.TERMS_VERSION);
+        UUID userId = jdbc.queryForObject("SELECT id FROM users WHERE email=?", UUID.class, email);
+        assertEquals(200, post("/api/auth/login", loginJson(email)).statusCode());
+
+        HttpResponse<String> first = post("/api/knowledge-bases", "{\"name\":\"Produtos estratégicos\",\"content\":\"Tabela comercial aprovada.\"}");
+        assertEquals(201, first.statusCode(), first.body());
+        UUID firstId = UUID.fromString(extract(ID, first.body()));
+        for (int index = 0; index < 20; index++) {
+            assertEquals(201, post("/api/knowledge-bases", "{\"name\":\"Base paginada " + index + "\",\"content\":\"Conteúdo " + index + "\"}").statusCode());
+        }
+
+        String firstPage = send("GET", "/api/knowledge-bases?page=0", null, null).body();
+        assertEquals(20, firstPage.split("\\\"id\\\"", -1).length - 1);
+        String secondPage = send("GET", "/api/knowledge-bases?page=1", null, null).body();
+        assertTrue(secondPage.contains("\"page\":1"));
+        assertEquals(1, secondPage.split("\\\"id\\\"", -1).length - 1);
+        assertTrue(send("GET", "/api/knowledge-bases?page=0&query=estrat", null, null).body().contains("Produtos estratégicos"));
+
+        assertEquals(204, delete("/api/knowledge-bases/" + firstId).statusCode());
+        assertEquals(userId, jdbc.queryForObject("SELECT deleted_by_user_id FROM knowledge_bases WHERE id=?", UUID.class, firstId));
+        assertTrue(jdbc.queryForObject("SELECT deleted_at IS NOT NULL FROM knowledge_bases WHERE id=?", Boolean.class, firstId));
+        assertFalse(send("GET", "/api/knowledge-bases?page=0&query=estrat", null, null).body().contains("Produtos estratégicos"));
+        assertFalse(send("GET", "/api/knowledge-bases/options?query=estrat", null, null).body().contains("Produtos estratégicos"));
+        assertEquals(404, delete("/api/knowledge-bases/" + firstId).statusCode());
+        assertEquals(404, send("POST", "/api/calls", "{\"knowledgeBaseId\":\"" + firstId + "\"}", token).statusCode());
     }
 
     @Test

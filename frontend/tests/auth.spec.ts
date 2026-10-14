@@ -22,8 +22,7 @@ test('cadastro individual, termos, login e saída', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'A conversa, no ritmo da call.' })).toBeVisible()
   await expect(page.getByText('Pessoa Teste')).toBeVisible()
   await expect(page.getByText('Inicie o microfone ou compartilhe o áudio da aba. As falas transcritas aparecerão aqui.')).toBeVisible()
-  await page.getByRole('button', { name: 'Abrir configurações da call' }).click()
-  await page.getByRole('button', { name: /Sair da conta/ }).click()
+  await page.getByRole('button', { name: 'Sair' }).click()
   await expect(page).toHaveURL(/\/app\/login$/)
 })
 
@@ -94,6 +93,7 @@ test('tela da call alterna controles e adapta o layout sem depender da API real'
       { sequenceNumber: 2, speaker: 'CLIENT', text: 'Quero entender o processo.', finalizedAt: '2026-10-12T13:02:00Z' },
     ] }),
   }))
+  await page.getByRole('button', { name: 'Abrir menu' }).click()
   await page.getByRole('link', { name: 'Reuniões' }).click()
   await expect(page).toHaveURL(/\/app\/reunioes$/)
   await expect(page.getByRole('heading', { name: 'Reuniões realizadas' })).toBeVisible()

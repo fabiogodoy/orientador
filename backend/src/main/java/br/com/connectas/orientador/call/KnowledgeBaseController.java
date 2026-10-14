@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -21,7 +22,10 @@ import org.springframework.web.bind.annotation.RestController;
 class KnowledgeBaseController {
     private final KnowledgeBaseService bases;
     KnowledgeBaseController(KnowledgeBaseService bases) { this.bases = bases; }
-    @GetMapping List<KnowledgeBaseResponse> list(Authentication auth) { return bases.list(userId(auth)); }
+    @GetMapping KnowledgeBasePage list(Authentication auth, @RequestParam(defaultValue = "0") int page,
+                                       @RequestParam(defaultValue = "") String query) { return bases.list(userId(auth), page, query); }
+    @GetMapping("/options") List<KnowledgeBaseResponse> options(Authentication auth,
+                                                                   @RequestParam(defaultValue = "") String query) { return bases.options(userId(auth), query); }
     @PostMapping @ResponseStatus(HttpStatus.CREATED)
     KnowledgeBaseResponse create(Authentication auth, @Valid @RequestBody KnowledgeBaseRequest request) { return bases.create(userId(auth), request); }
     @PutMapping("/{id}")

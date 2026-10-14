@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class KnowledgeBaseService {
     private static final Logger log = LoggerFactory.getLogger(KnowledgeBaseService.class);
+    private static final int PAGE_SIZE = 20;
     private final JdbcTemplate jdbc;
     private final AccountService accounts;
     private final Clock clock;
@@ -27,10 +28,29 @@ public class KnowledgeBaseService {
         this.clock = clock;
     }
 
-    List<KnowledgeBaseResponse> list(UUID userId) {
+    KnowledgeBasePage list(UUID userId, int page, String query) {
+        if (page < 0) throw new KnowledgeBaseNotFoundException();
         Identity identity = accounts.currentIdentity(userId);
-        return List.copyOf(jdbc.query("select id, name, content, created_by_user_id, updated_at from knowledge_bases where tenant_id=? order by updated_at desc, id desc",
-                (rs, row) -> response(rs.getObject("id", UUID.class), rs.getString("name"), rs.getString("content"), rs.getObject("created_by_user_id", UUID.class), rs.getTimestamp("updated_at").toInstant()), identity.tenantId()));
+        String term = query == null ? "" : query.trim().toLowerCase(java.util.Locale.ROOT);
+        String where = "tenant_id=? and deleted_at is null and lower(name) like ?";
+        String pattern = "%" + term + "%";
+        Integer total = jdbc.queryForObject("select count(*) from knowledge_bases where " + where, Integer.class, identity.tenantId(), pattern);
+        List<KnowledgeBaseResponse> items = jdbc.query("select id, name, content, created_by_user_id, updated_at from knowledge_bases where " + where
+                        + " order by updated_at desc, id desc limit ? offset ?",
+                (rs, row) -> response(rs.getObject("id", UUID.class), rs.getString("name"), rs.getString("content"), rs.getObject("created_by_user_id", UUID.class), rs.getTimestamp("updated_at").toInstant()),
+                identity.tenantId(), pattern, PAGE_SIZE, page * PAGE_SIZE);
+        log.info("Knowledge bases listed tenantId={} page={} queryLength={} total={}", identity.tenantId(), page, term.length(), total);
+        return new KnowledgeBasePage(List.copyOf(items), page, PAGE_SIZE, total == null ? 0 : total);
+    }
+
+    List<KnowledgeBaseResponse> options(UUID userId, String query) {
+        Identity identity = accounts.currentIdentity(userId);
+        String term = query == null ? "" : query.trim().toLowerCase(java.util.Locale.ROOT);
+        List<KnowledgeBaseResponse> items = jdbc.query("select id, name, content, created_by_user_id, updated_at from knowledge_bases "
+                        + "where tenant_id=? and deleted_at is null and lower(name) like ? order by name, id limit ?",
+                (rs, row) -> response(rs.getObject("id", UUID.class), rs.getString("name"), rs.getString("content"), rs.getObject("created_by_user_id", UUID.class), rs.getTimestamp("updated_at").toInstant()),
+                identity.tenantId(), "%" + term + "%", PAGE_SIZE);
+        return List.copyOf(items);
     }
 
     @Transactional
@@ -47,7 +67,7 @@ public class KnowledgeBaseService {
     @Transactional
     KnowledgeBaseResponse update(UUID userId, UUID id, KnowledgeBaseRequest request) {
         Identity identity = accounts.currentIdentity(userId);
-        int updated = jdbc.update("update knowledge_bases set name=?, content=?, updated_at=? where id=? and tenant_id=? and (created_by_user_id=? or ?=true)",
+        int updated = jdbc.update("update knowledge_bases set name=?, content=?, updated_at=? where id=? and tenant_id=? and deleted_at is null and (created_by_user_id=? or ?=true)",
                 normalize(request.name()), normalize(request.content()), Timestamp.from(clock.instant()), id, identity.tenantId(), identity.id(), canManageAny(identity));
         if (updated != 1) throw new KnowledgeBaseNotFoundException();
         log.info("Knowledge base updated knowledgeBaseId={} tenantId={} actorId={}", id, identity.tenantId(), identity.id());
@@ -57,20 +77,21 @@ public class KnowledgeBaseService {
     @Transactional
     void delete(UUID userId, UUID id) {
         Identity identity = accounts.currentIdentity(userId);
-        int deleted = jdbc.update("delete from knowledge_bases where id=? and tenant_id=? and (created_by_user_id=? or ?=true)", id, identity.tenantId(), identity.id(), canManageAny(identity));
+        int deleted = jdbc.update("update knowledge_bases set deleted_at=?, deleted_by_user_id=? where id=? and tenant_id=? and deleted_at is null and (created_by_user_id=? or ?=true)",
+                Timestamp.from(clock.instant()), identity.id(), id, identity.tenantId(), identity.id(), canManageAny(identity));
         if (deleted != 1) throw new KnowledgeBaseNotFoundException();
         log.info("Knowledge base deleted knowledgeBaseId={} tenantId={} actorId={}", id, identity.tenantId(), identity.id());
     }
 
     KnowledgeBaseSnapshot snapshot(Identity identity, UUID id) {
-        List<KnowledgeBaseSnapshot> bases = jdbc.query("select name, content from knowledge_bases where id=? and tenant_id=?",
+        List<KnowledgeBaseSnapshot> bases = jdbc.query("select name, content from knowledge_bases where id=? and tenant_id=? and deleted_at is null",
                 (rs, row) -> new KnowledgeBaseSnapshot(rs.getString("name"), rs.getString("content")), id, identity.tenantId());
         if (bases.isEmpty()) throw new KnowledgeBaseNotFoundException();
         return bases.getFirst();
     }
 
     private KnowledgeBaseResponse find(Identity identity, UUID id) {
-        List<KnowledgeBaseResponse> bases = jdbc.query("select id, name, content, created_by_user_id, updated_at from knowledge_bases where id=? and tenant_id=?",
+        List<KnowledgeBaseResponse> bases = jdbc.query("select id, name, content, created_by_user_id, updated_at from knowledge_bases where id=? and tenant_id=? and deleted_at is null",
                 (rs, row) -> response(rs.getObject("id", UUID.class), rs.getString("name"), rs.getString("content"), rs.getObject("created_by_user_id", UUID.class), rs.getTimestamp("updated_at").toInstant()), id, identity.tenantId());
         if (bases.isEmpty()) throw new KnowledgeBaseNotFoundException();
         return bases.getFirst();

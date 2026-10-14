@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import logoUrl from '../../assets/brand/orientador-logo.svg'
 import logoLightUrl from '../../assets/brand/orientador-logo-light.svg'
 import termsMarkdown from '../../docs/legal/termos-de-uso.md?raw'
-import { api, ApiError, TERMS_VERSION, type Account, type AccountType, type CallHistoryDetail, type CallHistoryItem, type CallHistoryPage, type CallSuggestion, type KnowledgeBase, type MeetingAnalysisState } from './api'
+import { api, ApiError, TERMS_VERSION, type Account, type AccountType, type CallHistoryDetail, type CallHistoryItem, type CallHistoryPage, type CallSuggestion, type KnowledgeBase, type KnowledgeBasePage, type MeetingAnalysisState } from './api'
 
 const routes = {
   home: '/app/',
@@ -11,6 +11,7 @@ const routes = {
   register: '/app/cadastro',
   terms: '/app/termos',
   meetings: '/app/reunioes',
+  knowledgeBases: '/app/bases-de-conhecimento',
 }
 const SUGGESTION_PAUSE_MS = 1800
 
@@ -49,6 +50,49 @@ function AuthLayout({ children, eyebrow, title, description }: {
 
 function ErrorNotice({ message }: { message: string | null }) {
   return message ? <div className="alert alert-error" role="alert">{message}</div> : null
+}
+
+function AuthenticatedShell({ account, onAccountChange, children }: { account: Account; onAccountChange: (account: Account) => void; children: ReactNode }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const sidebarRef = useRef<HTMLElement>(null)
+  const previousFocus = useRef<HTMLElement | null>(null)
+  const path = window.location.pathname.replace(/\/$/, '')
+  useEffect(() => {
+    if (!menuOpen) return
+    previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const focusable = () => Array.from(sidebarRef.current?.querySelectorAll<HTMLElement>('a[href], button:not([disabled])') ?? [])
+    window.requestAnimationFrame(() => focusable()[0]?.focus())
+    function keepFocus(event: KeyboardEvent) {
+      if (event.key === 'Escape') { setMenuOpen(false); return }
+      if (event.key !== 'Tab') return
+      const targets = focusable()
+      if (!targets.length) return
+      const first = targets[0]
+      const last = targets[targets.length - 1]
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+    }
+    window.addEventListener('keydown', keepFocus)
+    return () => { window.removeEventListener('keydown', keepFocus); previousFocus.current?.focus() }
+  }, [menuOpen])
+  async function logout() {
+    try { await api.logout() } finally { window.location.assign(routes.login) }
+  }
+  function closeMenu() { setMenuOpen(false) }
+  return <>
+    <div className="authenticated-shell">
+      <button type="button" className="sidebar-toggle" aria-label="Abrir menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}>☰</button>
+      {menuOpen && <button type="button" className="sidebar-backdrop" aria-label="Fechar menu" onClick={closeMenu} />}
+      <aside ref={sidebarRef} className={`app-sidebar ${menuOpen ? 'is-open' : ''}`} aria-label="Navegação principal">
+        <div><a className="sidebar-brand" href={routes.home} onClick={closeMenu}><img src={logoUrl} alt="Orientador" /></a><button type="button" className="sidebar-close" aria-label="Fechar menu" onClick={closeMenu}>×</button></div>
+        <nav><a href={routes.meetings} aria-current={path === routes.meetings ? 'page' : undefined} onClick={closeMenu}>Reuniões</a><a href={routes.knowledgeBases} aria-current={path === routes.knowledgeBases ? 'page' : undefined} onClick={closeMenu}>Bases de conhecimento</a><button type="button" onClick={() => { closeMenu(); setProfileOpen(true) }}>Perfil</button></nav>
+        <button type="button" className="sidebar-logout" onClick={() => void logout()}>Sair</button>
+      </aside>
+      <div className="authenticated-content">{children}</div>
+    </div>
+    {profileOpen && <ProfileDialog account={account} onClose={() => setProfileOpen(false)} onAccountChange={onAccountChange} />}
+  </>
 }
 
 function LoginPage() {
@@ -294,51 +338,56 @@ function ProfileDialog({ account, onClose, onAccountChange }: { account: Account
   </div>
 }
 
-function KnowledgeBasesDialog({ account, onClose }: { account: Account; onClose: () => void }) {
-  const [bases, setBases] = useState<KnowledgeBase[]>([])
+function KnowledgeBasesPage({ account }: { account: Account }) {
+  const [bases, setBases] = useState<KnowledgeBasePage | null>(null)
   const [name, setName] = useState('')
   const [content, setContent] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [page, setPage] = useState(0)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  useEffect(() => { api.knowledgeBases().then(data => setBases(Array.isArray(data) ? data : [])).catch(cause => setError(cause instanceof ApiError ? cause.message : 'Não foi possível carregar as bases.')) }, [])
+  useEffect(() => { setBases(null); setError(null); api.knowledgeBases(page, query).then(setBases).catch(cause => setError(cause instanceof ApiError ? cause.message : 'Não foi possível carregar as bases.')) }, [page, query])
   const canManage = (base: KnowledgeBase) => account.role === 'ORGANIZATION_MANAGER' || base.createdByUserId === account.id
   function resetForm() { setName(''); setContent(''); setEditingId(null); setError(null) }
+  function reload(targetPage = page) { api.knowledgeBases(targetPage, query).then(setBases).catch(cause => setError(cause instanceof ApiError ? cause.message : 'Não foi possível carregar as bases.')) }
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(null)
     try {
-      const base = editingId ? await api.updateKnowledgeBase(editingId, name, content) : await api.createKnowledgeBase(name, content)
-      setBases(current => [base, ...current.filter(item => item.id !== base.id)])
-      resetForm()
+      await (editingId ? api.updateKnowledgeBase(editingId, name, content) : api.createKnowledgeBase(name, content))
+      resetForm(); setPage(0); reload(0)
     } catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Não foi possível salvar a base agora.') } finally { setBusy(false) }
   }
   async function remove(base: KnowledgeBase) {
-    if (!window.confirm(`Excluir a base “${base.name}”? As reuniões já iniciadas preservam sua cópia.`)) return
+    if (!window.confirm(`Excluir a base “${base.name}”? Ela não estará disponível para novas reuniões.`)) return
     setBusy(true); setError(null)
-    try { await api.deleteKnowledgeBase(base.id); setBases(current => current.filter(item => item.id !== base.id)); if (editingId === base.id) resetForm() }
+    try { await api.deleteKnowledgeBase(base.id); if (editingId === base.id) resetForm(); reload() }
     catch (cause) { setError(cause instanceof ApiError ? cause.message : 'Não foi possível excluir a base agora.') } finally { setBusy(false) }
   }
-  return <div className="profile-backdrop" role="presentation" onMouseDown={event => { if (event.currentTarget === event.target) onClose() }}>
-    <section className="profile-dialog knowledge-dialog" role="dialog" aria-modal="true" aria-labelledby="knowledge-bases-title">
-      <header><div><span className="profile-kicker">SUA BIBLIOTECA</span><h2 id="knowledge-bases-title">Bases de conhecimento</h2></div><button className="profile-close" type="button" onClick={onClose} aria-label="Fechar bases de conhecimento">×</button></header>
-      <p className="dialog-description">Use textos que ajudam a orientar suas respostas. Eles ficam disponíveis apenas para pessoas do seu tenant.</p><ErrorNotice message={error} />
-      <form className="knowledge-form" onSubmit={save}><label htmlFor="knowledge-base-name">Nome da base</label><input id="knowledge-base-name" required maxLength={120} value={name} onChange={event => setName(event.target.value)} placeholder="Ex.: Produtos e preços" /><label htmlFor="knowledge-base-content">Conteúdo</label><textarea id="knowledge-base-content" required maxLength={12000} value={content} onChange={event => setContent(event.target.value)} placeholder="Políticas, experiências, diferenciais e informações que a IA pode consultar…" /><small>{content.length.toLocaleString('pt-BR')}/12.000 caracteres</small><div className="dialog-actions"><button type="button" className="subtle-button" onClick={resetForm} disabled={busy}>Limpar</button><button className="primary-button compact-primary" type="submit" disabled={busy}>{busy ? 'Salvando…' : editingId ? 'Salvar alterações' : 'Criar base'}</button></div></form>
-      <div className="knowledge-list"><h3>Disponíveis neste tenant</h3>{bases.length === 0 ? <p>Nenhuma base cadastrada ainda.</p> : bases.map(base => <article key={base.id}><div><strong>{base.name}</strong><p>{base.content}</p></div>{canManage(base) && <div className="knowledge-item-actions"><button type="button" onClick={() => { setEditingId(base.id); setName(base.name); setContent(base.content) }}>Editar</button><button type="button" className="text-danger" onClick={() => void remove(base)} disabled={busy}>Excluir</button></div>}</article>)}</div>
+  const totalPages = bases ? Math.ceil(bases.total / bases.pageSize) : 0
+  return <main className="knowledge-page"><header><span className="eyebrow">SUA BIBLIOTECA</span><h1>Bases de conhecimento</h1><p>Organize os textos que orientam suas respostas. Eles permanecem disponíveis apenas para seu tenant.</p></header><ErrorNotice message={error} />
+    <section className="knowledge-admin-grid"><form className="knowledge-form knowledge-editor" onSubmit={save}><h2>{editingId ? 'Editar base' : 'Nova base'}</h2><label htmlFor="knowledge-base-name">Nome da base</label><input id="knowledge-base-name" required maxLength={120} value={name} onChange={event => setName(event.target.value)} placeholder="Ex.: Produtos e preços" /><label htmlFor="knowledge-base-content">Conteúdo</label><textarea id="knowledge-base-content" required maxLength={12000} value={content} onChange={event => setContent(event.target.value)} placeholder="Políticas, experiências, diferenciais e informações que a IA pode consultar…" /><small>{content.length.toLocaleString('pt-BR')}/12.000 caracteres</small><div className="dialog-actions"><button type="button" className="subtle-button" onClick={resetForm} disabled={busy}>Limpar</button><button className="primary-button compact-primary" type="submit" disabled={busy}>{busy ? 'Salvando…' : editingId ? 'Salvar alterações' : 'Criar base'}</button></div></form>
+      <section className="knowledge-results" aria-labelledby="knowledge-results-title"><div className="knowledge-results-heading"><div><h2 id="knowledge-results-title">Bases disponíveis</h2><p>Encontre e mantenha o conhecimento do seu tenant.</p></div><label className="knowledge-search">Buscar por nome<input value={query} onChange={event => { setQuery(event.target.value); setPage(0) }} placeholder="Ex.: produtos" /></label></div>
+        {!bases && !error && <p className="history-state" role="status">Carregando bases…</p>}{bases?.items.length === 0 && <p className="history-state">{query ? 'Nenhuma base encontrada para essa busca.' : 'Nenhuma base cadastrada ainda.'}</p>}
+        <div className="knowledge-list">{bases?.items.map(base => <article key={base.id}><div><strong>{base.name}</strong><p>{base.content}</p><small>Atualizada em {formatDateTime(base.updatedAt)}</small></div>{canManage(base) && <div className="knowledge-item-actions"><button type="button" onClick={() => { setEditingId(base.id); setName(base.name); setContent(base.content); window.scrollTo({ top: 0, behavior: 'smooth' }) }}>Editar</button><button type="button" className="text-danger" onClick={() => void remove(base)} disabled={busy}>Excluir</button></div>}</article>)}</div>
+        {bases && totalPages > 1 && <nav className="history-pagination" aria-label="Paginação de bases"><button type="button" disabled={page === 0} onClick={() => setPage(current => current - 1)}>Anterior</button><span>Página {page + 1} de {totalPages}</span><button type="button" disabled={page + 1 >= totalPages} onClick={() => setPage(current => current + 1)}>Próxima</button></nav>}
+      </section>
     </section>
-  </div>
+  </main>
 }
 
 function PreparationDialog({ onStart }: { onStart: (context: string, knowledgeBaseId: string | undefined) => void }) {
   const [bases, setBases] = useState<KnowledgeBase[]>([])
   const [context, setContext] = useState('')
   const [selectedBaseId, setSelectedBaseId] = useState('')
+  const [baseQuery, setBaseQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
-  useEffect(() => { api.knowledgeBases().then(data => setBases(Array.isArray(data) ? data : [])).catch(cause => setError(cause instanceof ApiError ? cause.message : 'Não foi possível carregar as bases. Você ainda pode iniciar sem elas.')) }, [])
+  useEffect(() => { api.knowledgeBaseOptions(baseQuery).then(setBases).catch(cause => setError(cause instanceof ApiError ? cause.message : 'Não foi possível carregar as bases. Você ainda pode iniciar sem elas.')) }, [baseQuery])
   return <div className="profile-backdrop"><section className="profile-dialog preparation-dialog" role="dialog" aria-modal="true" aria-labelledby="preparation-title">
     <header><div><span className="profile-kicker">ANTES DE COMEÇAR</span><h2 id="preparation-title">Preparar reunião</h2></div></header>
     <p className="dialog-description">Opcional: dê um contexto para esta conversa e escolha uma base. Você pode ignorar e seguir como está.</p><ErrorNotice message={error} />
     <label htmlFor="meeting-context">Contexto da reunião</label><textarea id="meeting-context" maxLength={6000} value={context} onChange={event => setContext(event.target.value)} placeholder="Objetivo, pessoa com quem você falará, cenário ou restrições…" /><small>{context.length.toLocaleString('pt-BR')}/6.000 caracteres</small>
-    <label htmlFor="knowledge-base-select">Base de conhecimento</label><select id="knowledge-base-select" value={selectedBaseId} onChange={event => setSelectedBaseId(event.target.value)}><option value="">Nenhuma — usar somente a conversa</option>{bases.map(base => <option key={base.id} value={base.id}>{base.name}</option>)}</select>
+    <label htmlFor="knowledge-base-search">Buscar base de conhecimento</label><input id="knowledge-base-search" value={baseQuery} onChange={event => { setBaseQuery(event.target.value); setSelectedBaseId('') }} placeholder="Digite parte do nome" /><label htmlFor="knowledge-base-select">Base de conhecimento</label><select id="knowledge-base-select" value={selectedBaseId} onChange={event => setSelectedBaseId(event.target.value)}><option value="">Nenhuma — usar somente a conversa</option>{bases.map(base => <option key={base.id} value={base.id}>{base.name}</option>)}</select>
     <div className="dialog-actions preparation-actions"><button type="button" className="subtle-button" onClick={() => onStart('', undefined)}>Ignorar e iniciar</button><button type="button" className="primary-button compact-primary" onClick={() => onStart(context, selectedBaseId || undefined)}>Continuar</button></div>
   </section></div>
 }
@@ -356,7 +405,6 @@ function HomePage() {
   const [copied, setCopied] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
-  const [knowledgeBasesOpen, setKnowledgeBasesOpen] = useState(false)
   const [preparationOpen, setPreparationOpen] = useState(false)
   const [meetingTitle, setMeetingTitle] = useState(FALLBACK_MEETING_TITLE)
   const [meetingTitleDraft, setMeetingTitleDraft] = useState(FALLBACK_MEETING_TITLE)
@@ -409,15 +457,6 @@ function HomePage() {
     scrollToLatest('transcript', partialTranscripts.microphone || partialTranscripts.tab ? 'auto' : 'smooth')
   }, [liveMessages, partialTranscripts])
   useEffect(() => { scrollToLatest('guidance', 'smooth') }, [suggestions])
-
-  async function logout() {
-    try {
-      await api.logout()
-      window.location.assign(routes.login)
-    } catch {
-      setError('Não foi possível sair agora. Tente novamente.')
-    }
-  }
 
   function setSourceListening(source: AudioSource, listening: boolean) {
     if (source === 'microphone') setMicrophoneOn(listening)
@@ -793,7 +832,7 @@ function HomePage() {
   const avatarUrl = account.avatarUpdatedAt ? api.avatarUrl(account.avatarUpdatedAt) : null
   const accountContext = account.accountType === 'ORGANIZATION' ? `Gestor(a) · ${account.organizationName}` : 'Conta individual'
 
-  return <div className="call-page">
+  return <AuthenticatedShell account={account} onAccountChange={setAccount}><div className="call-page">
     <ErrorNotice message={error} />
     <header className="call-topbar">
       <a className="call-brand" href={routes.home} aria-label="Orientador — tela da call"><img src={logoUrl} alt="Orientador" /></a>
@@ -807,12 +846,11 @@ function HomePage() {
         <button type="button" className="client-identity" onClick={() => setProfileOpen(true)} aria-label="Abrir seu perfil"><span className="client-avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : initials(account.name)}</span><span><strong>{account.name}</strong><small>{accountContext}</small></span></button>
       </div>
       <div className="call-actions">
-        <a className="history-link" href={routes.meetings}><Icon name="transcript" size={17} />Reuniões</a>
         <button type="button" className={`icon-control ${microphoneOn ? 'is-on' : ''}`} aria-label={microphoneOn ? 'Parar de escutar microfone' : 'Escutar microfone'} aria-pressed={microphoneOn} onClick={() => void toggleMicrophone()}><Icon name="microphone" /></button>
         <button type="button" className={`icon-control ${tabAudioOn ? 'is-on' : ''}`} aria-label={tabAudioOn ? 'Parar de escutar áudio da aba' : 'Escutar áudio da aba'} aria-pressed={tabAudioOn} onClick={() => void toggleTabAudio()}><Icon name="tabAudio" /></button>
         <button type="button" className="suggest-button" disabled={!latestClientSegment.current || suggestionLoading} onClick={regenerateSuggestion}><Icon name="sparkles" />Sugerir agora</button>
         <button type="button" className={`end-button ${isCallActive ? '' : 'restart-button'}`} onClick={() => void toggleCall()}><Icon name="phone" />{isCallActive ? 'Encerrar call' : 'Iniciar call'}</button>
-        <div className="settings-wrap"><button type="button" className="icon-control" aria-label="Abrir configurações da call" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(value => !value)}><Icon name="settings" /></button>{settingsOpen && <div className="settings-popover"><strong>Privacidade da call</strong><span>O áudio serve apenas à transcrição em tempo real; o Orientador mantém somente o texto final.</span><button type="button" className="settings-link" onClick={() => { setSettingsOpen(false); setKnowledgeBasesOpen(true) }}>Bases de conhecimento</button><button type="button" className="logout-button" onClick={logout}>Sair da conta <span aria-hidden="true">↗</span></button></div>}</div>
+        <div className="settings-wrap"><button type="button" className="icon-control" aria-label="Abrir configurações da call" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(value => !value)}><Icon name="settings" /></button>{settingsOpen && <div className="settings-popover"><strong>Privacidade da call</strong><span>O áudio serve apenas à transcrição em tempo real; o Orientador mantém somente o texto final.</span><a className="settings-link" href={routes.knowledgeBases}>Bases de conhecimento</a></div>}</div>
       </div>
     </header>
 
@@ -854,17 +892,22 @@ function HomePage() {
     </main>
     <div className="call-bottom-note">Microfone e áudio compartilhado são transcritos de forma independente. O Orientador salva somente o texto final.</div>
     {profileOpen && <ProfileDialog account={account} onClose={() => setProfileOpen(false)} onAccountChange={setAccount} />}
-    {knowledgeBasesOpen && <KnowledgeBasesDialog account={account} onClose={() => setKnowledgeBasesOpen(false)} />}
     {preparationOpen && <PreparationDialog onStart={startWithPreparation} />}
-  </div>
+  </div></AuthenticatedShell>
 }
 
 function HistoryHeader({ account }: { account: Account }) {
   return <header className="history-topbar">
     <a className="call-brand" href={routes.home} aria-label="Orientador — tela da call"><img src={logoUrl} alt="Orientador" /></a>
-    <nav aria-label="Navegação principal"><a href={routes.home}>Call atual</a><a href={routes.meetings} aria-current="page">Reuniões</a></nav>
     <span className="history-account">{account.name}</span>
   </header>
+}
+
+function KnowledgeBasesRoute() {
+  const [account, setAccount] = useState<Account | null>(null)
+  useEffect(() => { api.me().then(setAccount).catch(() => window.location.replace(routes.login)) }, [])
+  if (!account) return <div className="loading-page" role="status">Carregando bases de conhecimento…</div>
+  return <AuthenticatedShell account={account} onAccountChange={setAccount}><KnowledgeBasesPage account={account} /></AuthenticatedShell>
 }
 
 function MeetingHistoryPage() {
@@ -880,12 +923,12 @@ function MeetingHistoryPage() {
   }, [account, page])
   if (!account) return <div className="loading-page" role="status">Carregando suas reuniões…</div>
   const totalPages = history ? Math.ceil(history.total / history.pageSize) : 0
-  return <div className="history-page"><HistoryHeader account={account} /><main className="history-main"><span className="eyebrow">HISTÓRICO</span><h1>Reuniões realizadas</h1><p className="history-lead">Consulte as reuniões encerradas e retome o contexto da conversa quando precisar.</p><ErrorNotice message={error} />
+  return <AuthenticatedShell account={account} onAccountChange={setAccount}><div className="history-page"><HistoryHeader account={account} /><main className="history-main"><span className="eyebrow">HISTÓRICO</span><h1>Reuniões realizadas</h1><p className="history-lead">Consulte as reuniões encerradas e retome o contexto da conversa quando precisar.</p><ErrorNotice message={error} />
     {!history && !error && <p className="history-state" role="status">Carregando reuniões…</p>}
     {history?.items.length === 0 && <p className="history-state">Ainda não há reuniões encerradas para consultar.</p>}
     {history?.items.map(item => <MeetingRow key={item.sessionId} item={item} account={account} />)}
     {history && totalPages > 1 && <nav className="history-pagination" aria-label="Paginação de reuniões"><button type="button" disabled={page === 0} onClick={() => setPage(current => current - 1)}>Anterior</button><span>Página {page + 1} de {totalPages}</span><button type="button" disabled={page + 1 >= totalPages} onClick={() => setPage(current => current + 1)}>Próxima</button></nav>}
-  </main></div>
+  </main></div></AuthenticatedShell>
 }
 
 function MeetingRow({ item, account }: { item: CallHistoryItem; account: Account }) {
@@ -915,10 +958,10 @@ function MeetingDetailPage({ sessionId }: { sessionId: string }) {
     })
   }
   if (!account) return <div className="loading-page" role="status">Carregando reunião…</div>
-  return <div className="history-page"><HistoryHeader account={account} /><main className="history-main detail-main"><a className="back-link" href={routes.meetings}>← Todas as reuniões</a><ErrorNotice message={error} />
+  return <AuthenticatedShell account={account} onAccountChange={setAccount}><div className="history-page"><HistoryHeader account={account} /><main className="history-main detail-main"><a className="back-link" href={routes.meetings}>← Todas as reuniões</a><ErrorNotice message={error} />
     {!meeting && !error && <p className="history-state" role="status">Carregando transcrição…</p>}
     {meeting && <><span className="eyebrow">REUNIÃO ENCERRADA</span><h1>{meeting.title}</h1><div className="meeting-meta"><span>{formatDateTime(meeting.startedAt)}</span><span>{formatDuration(meeting.durationSeconds)}</span>{meeting.ownerId !== account.id && <span>Realizada por {meeting.ownerName}</span>}</div><MeetingAnalysisPanel state={meeting.analysis} error={analysisError} onRetry={generateAnalysis} /><section className="history-transcript" aria-labelledby="history-transcript-title"><header><span className="panel-kicker"><Icon name="transcript" size={17} />Transcrição</span><h2 id="history-transcript-title">A conversa registrada</h2></header>{meeting.segments.length === 0 ? <p className="history-state">Esta reunião foi encerrada sem transcrição final.</p> : meeting.segments.map(segment => <article className={`history-segment ${segment.speaker === 'USER' ? 'from-user' : 'from-client'}`} key={segment.sequenceNumber}><small>{segment.speaker === 'USER' ? meeting.ownerName : 'Cliente'} · {formatDateTime(segment.finalizedAt)}</small><p>{segment.text}</p></article>)}</section></>}
-  </main></div>
+  </main></div></AuthenticatedShell>
 }
 
 function MeetingAnalysisPanel({ state, error, onRetry }: { state: MeetingAnalysisState; error: string | null; onRetry: () => void }) {
@@ -936,6 +979,7 @@ export function App() {
   if (path === routes.terms) return <TermsPage />
   if (path === routes.register) return <RegisterPage />
   if (path === routes.login) return <LoginPage />
+  if (path === routes.knowledgeBases) return <KnowledgeBasesRoute />
   if (path === routes.meetings) return <MeetingHistoryPage />
   const meetingDetail = path.match(/^\/app\/reunioes\/([^/]+)$/)
   if (meetingDetail) return <MeetingDetailPage sessionId={meetingDetail[1]} />

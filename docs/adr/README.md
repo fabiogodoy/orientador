@@ -12,7 +12,7 @@ Nunca reutilizar um número já listado, mesmo que o trabalho tenha sido feito e
 
 ## Próximo número livre
 
-`ADR-0009`
+`ADR-0010`
 
 ## ADRs registradas
 
@@ -26,3 +26,4 @@ Nunca reutilizar um número já listado, mesmo que o trabalho tenha sido feito e
 | ADR-0006 | Análise executiva imutável por reunião | `intent/analise-executiva-reunioes.md` |
 | ADR-0007 | Transcrição econômica por blocos e contexto efêmero | `intent/transcricao-e-sugestoes-economicas.md` |
 | ADR-0008 | Preparação por call e bases de conhecimento por tenant | `intent/preparacao-e-bases-de-conhecimento.md` |
+| ADR-0009 | Exclusão lógica auditável de bases de conhecimento | `intent/administracao-bases-de-conhecimento.md` |

@@ -69,6 +69,33 @@ describe('cadastro', () => {
   })
 })
 
+describe('administração de bases de conhecimento', () => {
+  const account = {
+    id: 'user-1', name: 'Vanessa Oliveira', email: 'vanessa@example.com', role: 'INDIVIDUAL' as const,
+    accountType: 'INDIVIDUAL' as const, organizationName: null, trialEndsAt: '2026-10-18T12:00:00Z', avatarUpdatedAt: null,
+  }
+
+  it('exibe navegação, busca e a primeira página de bases ativas', async () => {
+    window.history.replaceState({}, '', '/app/bases-de-conhecimento')
+    const fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/auth/me')) return Promise.resolve(new Response(JSON.stringify(account), { status: 200 }))
+      if (url.includes('/api/knowledge-bases?')) return Promise.resolve(new Response(JSON.stringify({ items: [{ id: 'base-1', name: 'Produtos', content: 'Tabela atualizada', createdByUserId: 'user-1', updatedAt: '2026-10-14T12:00:00Z' }], page: 0, pageSize: 20, total: 1 }), { status: 200 }))
+      return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetch)
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Bases de conhecimento' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Reuniões' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Bases de conhecimento' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('button', { name: 'Perfil' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sair' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Buscar por nome')).toBeInTheDocument()
+    expect(await screen.findByText('Produtos')).toBeInTheDocument()
+  })
+})
+
 it('disponibiliza os Termos completos sem login', () => {
   window.history.replaceState({}, '', '/app/termos')
   render(<App />)

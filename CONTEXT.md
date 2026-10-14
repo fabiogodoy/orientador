@@ -121,5 +121,5 @@ Texto pontual fornecido pela pessoa antes de uma call para situar seu objetivo, 
 _Evitar_: base de conhecimento, resumo interno de contexto
 
 **Base de conhecimento:**
-Referência textual reutilizável, pertencente a um tenant, que uma pessoa pode selecionar para orientar sugestões em uma call. É compartilhada para leitura dentro do tenant; sua administração é limitada ao criador ou gestor organizacional, conforme o perfil.
+Referência textual reutilizável, pertencente a um tenant, que uma pessoa pode selecionar para orientar sugestões em uma call. É compartilhada para leitura dentro do tenant; sua administração é limitada ao criador ou gestor organizacional, conforme o perfil. Sua exclusão é lógica e preserva o registro de ator e instante; uma base excluída não é selecionável para novas calls.
 _Evitar_: documento anexado, fonte de fatos automaticamente confirmados
