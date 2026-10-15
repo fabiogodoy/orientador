@@ -86,3 +86,6 @@ Build e Vitest reexecutados: aprovados, 50 testes passaram e 4 skips preexistent
 Arquivos desta revisão: frontend/src/App.tsx, frontend/src/styles.css, frontend/tests/meeting-toolbar.spec.ts e documentos do mesmo slug: Intent, PRD, Impact, Architecture Review, Test Plan, Implementation Review, Security Review, Observability Review e este Validation Report. Sem alteração em TrialNotice.
 Evidências: .scratch/organizar-barra-reuniao/sem-logo-topo/. Preview local encerrado após testes; sem deploy de produção.
 Sincronização: origin/main d5936bb732b9f44c26bcfaeb514218b89ff5a35e; integração direta na main, preservando GroqTranscriptionClient.java e .scratch/. Publicação registrada no complemento abaixo após o push.
+
+### Publicação do refinamento
+APROVADO. SHA da implementação na main: `a1e32f7fb7a41181b3975b9b15d671bfdd0affd0`. Push confirmado: `d5936bb..a1e32f7 main -> main`, saída 0; HEAD igual a origin/main. Integração direta sem conflitos. Este complemento documental é enviado em commit subsequente; não altera código validado.
