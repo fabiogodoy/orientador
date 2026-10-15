@@ -26,3 +26,6 @@ Todos os perfis ganham visibilidade correspondente à autorização atual. Não 
 
 ## Rollback e testes
 Reverter aplicação mantendo estruturas aditivas; exclusão de dados financeiros só por migration planejada. Unitários, integração Testcontainers exclusivamente, E2E e auditoria de governança. ADR exigida para novo ledger e integração de câmbio. Recomendação: implementar.
+
+## Revisão de navegação — 2026-10-15
+Somente frontend: App.tsx (menu/remoção dos botões), CostsPage.tsx (remoção do wrapper modal e modo embedded), costs.css e testes. Reutilizar CostsRoute e autenticação existentes. Navegação tem o ciclo de vida das demais páginas; não mantém captura em segundo plano na mesma aba (RN005 atualizado pelo pedido). API, banco e ADR-0011 intactos. Sincronização: main contém origin/main 94f55e86796b1635254add37ecdb20fc5829e13c após fetch. Preservar GroqTranscriptionClient.java modificado e .scratch/ fora do staging. Risco baixo; validar menu móvel, reload/back, login, erros e toolbar. Rollback pelo revert do commit de frontend.

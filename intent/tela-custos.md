@@ -19,9 +19,12 @@ Em 2026-10-15 o usuário confirmou todas as recomendações: estimativas a parti
 Tarifas e câmbio podem mudar; respostas sem consumo impedem estimativa completa. Custos representam consumo identificado, não uma fatura. Histórico sem medição não pode ser reconstruído fielmente.
 
 ## Critérios de sucesso
-CS001: consultar em um acesso pelo topo os totais, categorias, gráfico e calls filtrados.
+CS001: consultar em um acesso pelo menu os totais, categorias, gráfico e calls filtrados.
 CS002: estimativas coerentes entre cartões/gráfico/lista, sem substituir desconhecido por zero.
-CS003: permissões comprovadas por testes, sem interromper call ao abrir Custos.
+CS003: permissões comprovadas por testes e acesso por página autenticada.
 
 ## Alternativas e critérios para não implementar
 Consulta manual não atribui custos ao usuário. Não implementar valores fictícios ou exposição entre tenants. Nenhuma decisão de negócio pendente. Intent aprovada para PRD.
+
+## Ajuste de navegação aprovado — 2026-10-15
+Pedido explícito: “coloque os Custos no menu e não na topbar, e transforme em uma rota e não um modal”. Substitui a abertura sobreposta pelo link de menu para /app/custos. Mesmo slug, sem decisões pendentes. Ajuste pontual no frontend pelo fluxo simplificado do orchestrator; sem nova arquitetura ou alteração de medição.

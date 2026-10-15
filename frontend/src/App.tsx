@@ -1,4 +1,4 @@
-import { CostsButton, CostsPage } from './CostsPage'
+import { CostsPage } from './CostsPage'
 import { AUDIO_CHUNK_MAX_MS, AUDIO_CHUNK_MIN_MS, AUDIO_PAUSE_MS, SUGGESTION_DELAY_MS, SUGGESTION_INTERVAL_MS, SUGGESTION_MAX_AGE_MS, recordCallTiming, hasUsefulSpeech } from './callTiming'
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
@@ -91,7 +91,7 @@ function AuthenticatedShell({ account, onAccountChange, children }: { account: A
       {menuOpen && <button type="button" className="sidebar-backdrop" aria-label="Fechar menu" onClick={closeMenu} />}
       <aside ref={sidebarRef} className={`app-sidebar ${menuOpen ? 'is-open' : ''}`} aria-label="Navegação principal">
         <div><a className="sidebar-brand" href={routes.home} onClick={closeMenu}><img src={logoLightUrl} alt="Orientador" /></a><button type="button" className="sidebar-close" aria-label="Fechar menu" onClick={closeMenu}>×</button></div>
-        <nav><a href={routes.meetings} aria-current={path === routes.meetings ? 'page' : undefined} onClick={closeMenu}>Reuniões</a><a href={routes.knowledgeBases} aria-current={path === routes.knowledgeBases ? 'page' : undefined} onClick={closeMenu}>Bases de conhecimento</a><button type="button" onClick={() => { closeMenu(); setProfileOpen(true) }}>Perfil</button></nav>
+        <nav><a href={routes.meetings} aria-current={path === routes.meetings ? 'page' : undefined} onClick={closeMenu}>Reuniões</a><a href={routes.knowledgeBases} aria-current={path === routes.knowledgeBases ? 'page' : undefined} onClick={closeMenu}>Bases de conhecimento</a><a href={routes.costs} aria-current={path === routes.costs ? 'page' : undefined} onClick={closeMenu}>Custos</a><button type="button" onClick={() => { closeMenu(); setProfileOpen(true) }}>Perfil</button></nav>
         <TrialNotice trialEndsAt={account.trialEndsAt} />
         <button type="button" className="sidebar-logout" onClick={() => void logout()}>Sair</button>
       </aside>
@@ -959,7 +959,6 @@ function HomePage() {
     <ErrorNotice message={transcriptionErrors.microphone ? `Microfone: ${transcriptionErrors.microphone}` : null} />
     <ErrorNotice message={transcriptionErrors.tab ? `Áudio da aba: ${transcriptionErrors.tab}` : null} />
     <header className="call-topbar" aria-label="Sua conta">
-      <CostsButton />
       <button type="button" className="client-identity" onClick={() => setProfileOpen(true)} aria-label="Abrir seu perfil"><span className="client-avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : initials(account.name)}</span><span><strong>{account.name}</strong><small>{accountContext}</small></span></button>
     </header>
     <section className="meeting-toolbar" aria-label="Controles da reunião">
@@ -1026,7 +1025,6 @@ function HomePage() {
 
 function HistoryHeader({ account }: { account: Account }) {
   return <header className="history-topbar">
-    <CostsButton />
     <span className="history-account">{account.name}</span>
   </header>
 }

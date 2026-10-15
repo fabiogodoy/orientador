@@ -11,30 +11,11 @@ export function costMoney(value: number, currency: 'USD' | 'BRL' = 'USD') {
 }
 const minutes = (seconds: number) => new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 }).format(seconds / 60)
 
-export function CostsButton() {
-  const [open, setOpen] = useState(false)
-  const dialog = useRef<HTMLDialogElement>(null)
-  const trigger = useRef<HTMLButtonElement>(null)
-  useEffect(() => {
-    if (!open) return
-    dialog.current?.showModal()
-    const previous = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = previous; window.requestAnimationFrame(() => trigger.current?.focus()) }
-  }, [open])
-  return <>
-    <button ref={trigger} className="costs-top-button" type="button" onClick={() => setOpen(true)}><WalletIcon />Custos</button>
-    {open && <dialog ref={dialog} className="costs-dialog" aria-labelledby="costs-title" onCancel={() => setOpen(false)} onClose={() => setOpen(false)}>
-      <CostsPage onClose={() => { dialog.current?.close(); setOpen(false) }} embedded />
-    </dialog>}
-  </>
-}
-
 function WalletIcon() {
   return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="15" rx="3" /><path d="M3 9h18M17 13h4v4h-4a2 2 0 0 1 0-4ZM5 5V3h13" /></svg>
 }
 
-export function CostsPage({ onClose, embedded = false }: { onClose?: () => void; embedded?: boolean }) {
+export function CostsPage() {
   const [period, setPeriod] = useState<CostPeriod>('WEEK')
   const [page, setPage] = useState(0)
   const [revision, setRevision] = useState(0)
@@ -51,18 +32,18 @@ export function CostsPage({ onClose, embedded = false }: { onClose?: () => void;
   return <main className="costs-page">
     <header className="costs-heading">
       <div className="costs-heading-copy">
-        {onClose ? <button className="costs-back" type="button" onClick={onClose} aria-label="Fechar custos" autoFocus>←</button> : <a className="costs-back" href="/app/" aria-label="Voltar à call">←</a>}
+        <a className="costs-back" href="/app/" aria-label="Voltar à call">←</a>
         <div><span className="costs-eyebrow">CONSUMO DE IA</span><h1 id="costs-title">Custos</h1><p>Acompanhe o gasto estimado com transcrição e sugestões.</p></div>
       </div>
       <div className="costs-periods" role="group" aria-label="Período dos custos">{periods.map(([value, label]) => <button type="button" key={value} aria-pressed={period === value} onClick={() => { if (value !== period) changePeriod(value) }}>{label}</button>)}</div>
     </header>
     {error ? <div className="costs-state" role="alert"><strong>Não foi possível carregar os custos.</strong><p>Tente novamente em instantes.</p><button className="costs-outline-button" onClick={reload}>Tentar novamente</button></div>
       : !data ? <div className="costs-state" role="status">Carregando seus custos…</div>
-        : <CostContent data={data} embedded={embedded} onReload={reload} onPage={changePage} />}
+        : <CostContent data={data} onReload={reload} onPage={changePage} />}
   </main>
 }
 
-function CostContent({ data, embedded, onReload, onPage }: { data: CostReport; embedded: boolean; onReload: () => void; onPage: (page: number) => void }) {
+function CostContent({ data, onReload, onPage }: { data: CostReport; onReload: () => void; onPage: (page: number) => void }) {
   const { totals, calls, exchangeRate: rate } = data
   const partial = totals.unknownOperations > 0 || calls.legacyCount > 0
   const brl = (value: number) => rate ? costMoney(value * rate.usdBrl, 'BRL') : 'R$ indisponível'
@@ -83,10 +64,10 @@ function CostContent({ data, embedded, onReload, onPage }: { data: CostReport; e
     <section className="costs-panel" aria-labelledby="recent-costs-title"><div className="costs-panel-heading"><div><h2 id="recent-costs-title">Calls recentes</h2><p>Custos e duração referentes ao período selecionado</p></div><span className="costs-count">{calls.count} calls</span></div>
       {!data.recentCalls.length ? <div className="costs-empty">Nenhuma call neste período.</div> : <div className="costs-table-scroll"><table className="costs-table"><thead><tr><th>Reunião</th><th>Duração</th><th>Transcrição</th><th>Sugestões</th><th>Total estimado</th></tr></thead><tbody>{data.recentCalls.map(call => {
         const total = call.transcriptionUsd === null && call.suggestionsUsd === null ? null : (call.transcriptionUsd ?? 0) + (call.suggestionsUsd ?? 0)
-        return <tr key={call.sessionId}><td><strong>{call.status === 'ENDED' && !embedded ? <a href={`/app/reunioes/${call.sessionId}`}>{call.title}</a> : call.title}</strong><small>{dateLabel(call.startedAt)} · {call.ownerName}{call.status === 'ACTIVE' ? ' · Em andamento' : ''}</small>{call.partial && <span className="costs-coverage">{total === null ? 'Custo não disponível' : 'Custo parcial'}</span>}</td><td>{minutes(call.durationSeconds)} min</td><td>{call.transcriptionUsd === null ? 'Não disponível' : costMoney(call.transcriptionUsd)}</td><td>{call.suggestionsUsd === null ? 'Não disponível' : costMoney(call.suggestionsUsd)}</td><td><strong>{total === null ? 'Não disponível' : costMoney(total)}</strong>{total !== null && <small>{brl(total)}</small>}</td></tr>
+        return <tr key={call.sessionId}><td><strong>{call.status === 'ENDED' ? <a href={`/app/reunioes/${call.sessionId}`}>{call.title}</a> : call.title}</strong><small>{dateLabel(call.startedAt)} · {call.ownerName}{call.status === 'ACTIVE' ? ' · Em andamento' : ''}</small>{call.partial && <span className="costs-coverage">{total === null ? 'Custo não disponível' : 'Custo parcial'}</span>}</td><td>{minutes(call.durationSeconds)} min</td><td>{call.transcriptionUsd === null ? 'Não disponível' : costMoney(call.transcriptionUsd)}</td><td>{call.suggestionsUsd === null ? 'Não disponível' : costMoney(call.suggestionsUsd)}</td><td><strong>{total === null ? 'Não disponível' : costMoney(total)}</strong>{total !== null && <small>{brl(total)}</small>}</td></tr>
       })}</tbody></table></div>}
       {calls.count > data.pageSize && <nav className="costs-pagination" aria-label="Páginas de calls"><button type="button" disabled={data.page === 0} onClick={() => onPage(data.page - 1)}>Anterior</button><span>Página {data.page + 1} de {Math.ceil(calls.count / data.pageSize)}</span><button type="button" disabled={(data.page + 1) * data.pageSize >= calls.count} onClick={() => onPage(data.page + 1)}>Próxima</button></nav>}
-      <footer className="costs-panel-footer">Dados salvos na sua conta. {embedded && 'Consulte os detalhes das calls em Reuniões.'}</footer>
+      <footer className="costs-panel-footer">Dados salvos na sua conta.</footer>
     </section>
     <footer className="costs-notes"><p>{rate ? <>US$ 1 = {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 4 }).format(rate.usdBrl)} · {rate.source} · {dateLabel(rate.date)}.{rate.fallback && ' Cotação em cache: não foi possível atualizar agora.'} Conversão pela última cotação disponível, aplicada a todo o período.</> : 'Cotação indisponível no momento. Os custos em US$ continuam disponíveis.'}</p><p>Estimativas pelas tarifas dos provedores; não representam uma fatura. Não incluem análise executiva, impostos, descontos ou créditos. Dias no horário de Brasília.</p></footer>
   </>

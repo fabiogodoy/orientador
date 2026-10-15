@@ -44,11 +44,11 @@ describe('Custos', () => {
   })
   it('distinguishes unavailable costs and missing FX from zero', async () => {
     vi.mocked(api.costs).mockResolvedValue({ ...report, exchangeRate: null, calls: { ...report.calls, legacyCount: 1 }, recentCalls: [{ ...report.recentCalls[0], partial: true, transcriptionUsd: null, suggestionsUsd: null }] })
-    render(<CostsPage embedded />)
+    render(<CostsPage />)
     await screen.findByText('Custo não disponível')
     expect(screen.getByText('Estimativa parcial.')).toBeVisible()
     expect(screen.getAllByText('R$ indisponível')).toHaveLength(3)
-    expect(screen.queryByRole('link', { name: 'Alinhamento' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Alinhamento' })).toHaveAttribute('href', '/app/reunioes/one')
     expect(screen.getByText(/Cotação indisponível/)).toBeVisible()
   })
   it('shows empty state and resets page on period selection', async () => {

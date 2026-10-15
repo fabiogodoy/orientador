@@ -1,5 +1,7 @@
 # Delivery Validation Report — Tela de Custos
 
+> A entrega original abaixo é histórica. A revisão de navegação ao final substitui RF001/RN005 e o comportamento de modal, conforme pedido posterior do usuário.
+
 ## Metadados
 Slug: tela-custos. Data: 2026-10-15. Responsável: Codex. Intent: tela-custos.md. PRD: tela-custos_prd.md. Status: **APROVADO**.
 
@@ -97,3 +99,26 @@ Intent/PRD/RF/RN/build/testes/multi-tenancy/segurança/regressão/reviews/reinte
 - `intent/tela-custos_security-review.md`
 - `intent/tela-custos_test_plan.md`
 - `intent/tela-custos_validation_report.md`
+
+## Revisão de navegação — 2026-10-15
+
+### Problema, escopo e requisitos
+Pedido explícito atendido: Custos no menu principal abre /app/custos como página autenticada; botão da topbar e modal removidos. Mesmo slug e conversa, sem nova Intent. Fluxo simplificado por ajuste pontual; Intent/PRD/Impact/Architecture Review atualizados antes do código. Sem nova ADR, API ou migration.
+
+RF001 OK: menu nativo, indicação de página atual, URL, reload, back, mobile e ausência de modal/botão na topbar testados. RN005 revisada: segue navegação das outras páginas, sem manter captura na mesma aba após sair. Link permite abrir outra aba pelo navegador. RF002–RF005 e estados de erro revalidados; RF006–RF008 e RN001–RN004 de backend preservados, sem mudança. 8 RF atendidos, 0 pendentes; evidência Java anterior continua válida para o código inalterado.
+
+### Validação técnica, segurança e ambiente
+- `npm run build`: sucesso; permanece warning preexistente do chunk PDF.
+- `npm test`: 55 passaram, 4 skips preexistentes, 8 arquivos (3,78s).
+- `npm run test:e2e -- tests/costs.spec.ts tests/meeting-toolbar.spec.ts --workers=1`: 8 passaram (11,3s).
+- Vite localhost:5173 respondeu HTTP 200; Playwright executou a aplicação com APIs simuladas, sem escrever em banco persistente. Backend local não reiniciado nem modificado nesta revisão.
+- Proteção de login validada em E2E; autorização/isolamento mantidos no servidor. Sem segredos novos ou alterações de credenciais.
+- Reviews de implementação, segurança e observabilidade aprovadas. Inspeção visual das capturas de desktop e menu móvel aprovada.
+- Evidências: `.scratch/tela-custos-menu/build.log`, `unit.log`, `e2e.log`, `custos-1440.png`, `custos-390.png`, `custos-320.png`, `menu-mobile.png`. Screenshots usam dados sintéticos.
+
+### Arquivos desta revisão
+Frontend: `frontend/src/App.tsx`, `frontend/src/CostsPage.tsx`, `frontend/src/CostsPage.test.tsx`, `frontend/src/costs.css`, `frontend/tests/costs.spec.ts`, `frontend/tests/meeting-toolbar.spec.ts`.
+Governança: `intent/tela-custos.md`, `intent/tela-custos_prd.md`, `intent/tela-custos_impact.md`, `intent/tela-custos_architecture-review.md`, `intent/tela-custos_test_plan.md`, `intent/tela-custos_implementation-review.md`, `intent/tela-custos_security-review.md`, `intent/tela-custos_observability-review.md` e este relatório.
+
+### Reintegração e pendências
+Alteração diretamente na main, permitida pelo projeto; base sincronizada 94f55e86796b1635254add37ecdb20fc5829e13c. Pendências externas preservadas e fora do staging: GroqTranscriptionClient.java e .scratch/. Sem deploy de produção. Resultado final da auditoria e publicação registrado após execução abaixo.

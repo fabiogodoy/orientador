@@ -6,3 +6,6 @@ Revisados todos os arquivos da entrega contra Intent/PRD/Impact/ADR-0011. Coleta
 Frontend separa API/tipos/página/estilo. Dialog nativo mantém HomePage e captura vivos, cancela visualmente resultados obsoletos, preserva foco com Escape/fechar. Gráfico SVG ajusta largura e disponibiliza tabela de valores; API não retorna conteúdo sensível. Dependências novas: nenhuma.
 
 Achados corrigidos durante validação: assinatura da função request e import de SessionPrincipal; limpeza explícita de fixtures dos componentes; foco ao desmontar dialog; escala do gráfico móvel; calls encerradas exatamente à meia-noite não pertencem ao dia seguinte. Builds/testes finais passam. Catálogo de tarifas exige atualização ao mudar preço/modelo; ALL cresce por número de dias, adequado ao estágio atual e sem truncamento silencioso.
+
+## Revisão de navegação — 2026-10-15
+APROVADA. Removidos CostsButton, estado/efeito do dialog, props embedded/onClose e estilos específicos. Link nativo reutiliza CostsRoute e AuthenticatedShell, com aria-current e fechamento do menu móvel. Complexidade baixa, nenhuma dependência, nenhum novo débito. Revisão do diff e screenshots desktop/mobile concluída; build, 55 testes de componentes e 8 E2E passaram (4 skips preexistentes).
