@@ -122,3 +122,6 @@ Governança: `intent/tela-custos.md`, `intent/tela-custos_prd.md`, `intent/tela-
 
 ### Reintegração e pendências
 Alteração diretamente na main, permitida pelo projeto; base sincronizada 94f55e86796b1635254add37ecdb20fc5829e13c. Pendências externas preservadas e fora do staging: GroqTranscriptionClient.java e .scratch/. Sem deploy de produção. Resultado final da auditoria e publicação registrado após execução abaixo.
+
+### Parecer final da revisão
+**APROVADO.** Intent, RF/RN revisados, build, testes, reviews, ambiente e auditoria: OK. `scripts/governance-audit.sh`: TUDO OK (`.scratch/tela-custos-menu/audit.log`); `git diff --check`: sem erros. Implementação integrada diretamente na main no SHA `f4189a6332dc3a7df8c7763b92594db9785b0ada`. `git push origin main`: sucesso, `94f55e8..f4189a6 main -> main`. O commit que contém este complemento é exclusivamente documental; sua revisão Git identifica o SHA final documental. Sem regressão encontrada ou risco impeditivo.
