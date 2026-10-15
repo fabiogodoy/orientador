@@ -26,7 +26,7 @@ export type KnowledgeBase = { id: string; name: string; content: string; created
 export type KnowledgeBasePage = { items: KnowledgeBase[]; page: number; pageSize: number; total: number }
 export type CallPreparation = { meetingContext?: string; knowledgeBaseId?: string }
 export type TranscriptionSpeaker = 'USER' | 'CLIENT'
-export type CallSuggestion = { tipo: string; trechoCliente: string; proximaFala: string; pontosChave: string[]; contextSummary: string; summarizedThrough: number }
+export type CallSuggestion = { acao?: 'FALAR' | 'OUVIR'; tipo: string; trechoCliente: string; proximaFala: string; pontosChave: string[]; contextSummary: string; summarizedThrough: number }
 export type CallHistoryItem = { sessionId: string; title: string; startedAt: string; endedAt: string; durationSeconds: number; ownerId: string; ownerName: string }
 export type CallHistoryPage = { items: CallHistoryItem[]; page: number; pageSize: number; total: number }
 export type TranscriptHistorySegment = { sequenceNumber: number; speaker: TranscriptionSpeaker; text: string; finalizedAt: string }
@@ -53,7 +53,7 @@ async function getCsrfToken(): Promise<string> {
   return csrfToken
 }
 
-async function request<T>(path: string, method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', body?: unknown): Promise<T> {
+async function request<T>(path: string, method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', body?: unknown, signal?: AbortSignal): Promise<T> {
   const headers: Record<string, string> = {}
   if (method !== 'GET') {
     headers['Content-Type'] = 'application/json'
@@ -64,6 +64,7 @@ async function request<T>(path: string, method: 'GET' | 'POST' | 'PUT' | 'PATCH'
     response = await fetch(`${API_URL}${path}`, {
       method,
       credentials: 'include',
+      signal,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
     })
@@ -98,7 +99,7 @@ async function upload(path: string, file: Blob): Promise<Account> {
 }
 
 async function uploadAudio(sessionId: string, source: 'microphone' | 'tab', sequenceNumber: number, audio: Blob): Promise<{ sequenceNumber: number; speaker: TranscriptionSpeaker; text: string }> {
-  const response = await fetch(`${API_URL}/api/calls/${sessionId}/audio/${source}/${sequenceNumber}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'audio/webm', 'X-CSRF-TOKEN': await getCsrfToken() }, body: audio })
+  const response = await fetch(`${API_URL}/api/calls/${sessionId}/audio/${source}/${sequenceNumber}`, { method: 'POST', credentials: 'include', signal: AbortSignal.timeout(25000), headers: { 'Content-Type': 'audio/webm', 'X-CSRF-TOKEN': await getCsrfToken() }, body: audio })
   if (!response.ok) { const data = await response.json().catch(() => ({})) as { code?: string; message?: string }; throw new ApiError(data.code ?? 'REQUEST_ERROR', data.message ?? 'Não foi possível transcrever este bloco.') }
   return response.json()
 }
@@ -131,7 +132,7 @@ export const api = {
   generateExecutiveAnalysis: (sessionId: string) => request<MeetingAnalysisState>(`/api/calls/${sessionId}/executive-analysis`, 'POST'),
   transcribeAudio: (sessionId: string, source: 'microphone' | 'tab', sequenceNumber: number, audio: Blob) => uploadAudio(sessionId, source, sequenceNumber, audio),
   saveTranscriptSegment: (sessionId: string, sequenceNumber: number, text: string, speaker: TranscriptionSpeaker) => request<void>(`/api/calls/${sessionId}/segments`, 'POST', { sequenceNumber, text, speaker }),
-  generateSuggestion: (sessionId: string, contextSummary: string, summarizedThrough: number) => request<CallSuggestion>(`/api/calls/${sessionId}/suggestions`, 'POST', { contextSummary, summarizedThrough }),
+  generateSuggestion: (sessionId: string, contextSummary: string, summarizedThrough: number) => request<CallSuggestion>(`/api/calls/${sessionId}/suggestions`, 'POST', { contextSummary, summarizedThrough }, AbortSignal.timeout(20000)),
   updateCallTitle: (sessionId: string, title: string, automatic = false) => request<{ title: string }>(`/api/calls/${sessionId}/title`, 'PATCH', { title, automatic }),
   endCall: (sessionId: string) => request<void>(`/api/calls/${sessionId}/end`, 'POST'),
 }

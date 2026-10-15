@@ -238,7 +238,7 @@ describe('tela principal de call', () => {
     render(<App />)
 
     await screen.findByRole('heading', { name: 'Próxima melhor resposta' })
-    expect(screen.getByText('Aguardando a primeira fala do cliente para orientar sua próxima resposta.')).toBeInTheDocument()
+    expect(screen.getByText('Aguardando a primeira fala do interlocutor para orientar sua próxima resposta.')).toBeInTheDocument()
     expect(screen.queryByText(/Antes de comparar apenas o valor/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Sugerir agora' })).toBeDisabled()
   })

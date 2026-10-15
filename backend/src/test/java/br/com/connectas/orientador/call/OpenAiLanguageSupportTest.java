@@ -23,7 +23,7 @@ class OpenAiLanguageSupportTest {
 
     @Test
     void requiresSuggestionToFollowLastClientSpeechLanguageInBilingualCalls() {
-        assertTrue(OpenAiSuggestionClient.INSTRUCTIONS.contains("mesmo idioma da última fala do cliente"));
+        assertTrue(OpenAiSuggestionClient.INSTRUCTIONS.contains("mesmo idioma da última fala do interlocutor"));
         assertTrue(OpenAiSuggestionClient.INSTRUCTIONS.contains("português"));
         assertTrue(OpenAiSuggestionClient.INSTRUCTIONS.contains("inglês"));
         assertTrue(OpenAiSuggestionClient.INSTRUCTIONS.contains("conversa pode alternar"));

@@ -48,9 +48,9 @@ test('call longa preserva contexto após falha, recupera e limpa erros ao encerr
   await page.getByRole('button', { name: 'Ignorar e iniciar' }).click()
   await expect(page.getByRole('button', { name: 'Parar de escutar áudio da aba' })).toBeVisible()
   for (let block = 1; block <= 130; block++) {
-    await page.clock.runFor(block === 1 ? 15000 : 13200)
+    await page.clock.runFor(block === 1 ? 8000 : 7700)
     await expect(page.getByText(`Qual é o prazo da integração ${block}?`, { exact: true })).toBeVisible()
-    await page.clock.runFor(1800)
+    await page.clock.runFor(300)
     if (block === 90) await expect(page.getByRole('button', { name: 'Tentar novamente' })).toBeVisible()
     else await expect(page.getByText(`Orientação ${block}`, { exact: true })).toBeVisible()
   }

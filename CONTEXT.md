@@ -33,11 +33,11 @@ Texto produzido a partir da fala capturada durante uma reunião e guardado para 
 _Evitar_: gravação
 
 **Sugestão:**
-Orientação transitória apresentada ao vendedor durante a reunião para apoiar sua próxima fala ou resposta a uma objeção, baseada exclusivamente na transcrição da própria reunião.
+Orientação transitória apresentada ao usuário durante a reunião para apoiar uma resposta, comentário ou pergunta adequada ao seu papel e ao momento, usando a conversa e as referências fornecidas. Pode indicar que é melhor continuar ouvindo.
 _Evitar_: resposta obrigatória, decisão automática
 
 **Sugestão em tempo real:**
-Sugestão produzida após uma fala final do cliente e exibida para uso imediato pelo vendedor; não compõe o histórico persistido da reunião.
+Sugestão produzida a partir da fala do interlocutor e exibida enquanto ainda é útil ao usuário; não compõe o histórico persistido da reunião.
 _Evitar_: resposta definitiva, registro de transcrição
 
 **Histórico de orientação da call:**
@@ -123,3 +123,11 @@ _Evitar_: base de conhecimento, resumo interno de contexto
 **Base de conhecimento:**
 Referência textual reutilizável, pertencente a um tenant, que uma pessoa pode selecionar para orientar sugestões em uma call. É compartilhada para leitura dentro do tenant; sua administração é limitada ao criador ou gestor organizacional, conforme o perfil. Sua exclusão é lógica e preserva o registro de ator e instante; uma base excluída não é selecionável para novas calls.
 _Evitar_: documento anexado, fonte de fatos automaticamente confirmados
+
+**Interlocutor:**
+Pessoa ou pessoas que conversam com o usuário na reunião. Seu papel pode ser entrevistador, candidato, cliente ou outro conforme o contexto; não é presumido comercial.
+_Evitar_: cliente como papel universal
+
+**Momento de ouvir:**
+Situação em que a orientação adequada é deixar o interlocutor continuar, sem propor uma fala ou pergunta ao usuário.
+_Evitar_: erro de geração, ausência de contexto

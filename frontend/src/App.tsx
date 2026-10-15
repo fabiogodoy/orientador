@@ -1,3 +1,4 @@
+import { AUDIO_CHUNK_MAX_MS, AUDIO_CHUNK_MIN_MS, AUDIO_PAUSE_MS, SUGGESTION_DELAY_MS, SUGGESTION_INTERVAL_MS, SUGGESTION_MAX_AGE_MS, recordCallTiming, hasUsefulSpeech } from './callTiming'
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { ExecutiveSummaryExportButton } from './ExecutiveSummaryExportButton'
@@ -15,7 +16,6 @@ const routes = {
   meetings: '/app/reunioes',
   knowledgeBases: '/app/bases-de-conhecimento',
 }
-const SUGGESTION_PAUSE_MS = 1800
 
 function Brand({ light = false }: { light?: boolean }) {
   return <a className={`brand ${light ? 'brand-light' : ''}`} href={routes.home} aria-label="Orientador — início">
@@ -248,13 +248,15 @@ type SourceCapture = {
   audioActivityTimer: number | null
   usesAudioActivityDetection: boolean
   hasAudibleSignal: boolean
+  chunkStartedAt: number
+  lastSpeechAt: number
+  speaking: boolean
 }
 type ScrollPanel = 'transcript' | 'guidance'
 type SuggestionEntry = { segmentNumber: number; suggestion: CallSuggestion }
 type DisplayAudioOptions = DisplayMediaStreamOptions & { preferCurrentTab?: boolean; selfBrowserSurface?: 'exclude'; systemAudio?: 'include'; windowAudio?: 'system' }
 const FALLBACK_MEETING_TITLE = 'Reunião sem título'
 const SCROLL_FOLLOW_THRESHOLD = 48
-const AUDIO_CHUNK_DURATION_MS = 15_000
 const AUDIO_ACTIVITY_SAMPLE_MS = 250
 const SPEECH_RMS_THRESHOLD = 5
 
@@ -413,7 +415,7 @@ function HomePage() {
   const [meetingTitle, setMeetingTitle] = useState(FALLBACK_MEETING_TITLE)
   const [meetingTitleDraft, setMeetingTitleDraft] = useState(FALLBACK_MEETING_TITLE)
   const [editingMeetingTitle, setEditingMeetingTitle] = useState(false)
-  const [liveMessages, setLiveMessages] = useState<{ speaker: TranscriptSpeaker; time: string; text: string; source: AudioSource }[]>([])
+  const [liveMessages, setLiveMessages] = useState<{ speaker: TranscriptSpeaker; time: string; text: string; source: AudioSource; sequenceNumber: number }[]>([])
   const [partialTranscripts, setPartialTranscripts] = useState<Record<AudioSource, string>>({ microphone: '', tab: '' })
   const [scrollFollowing, setScrollFollowing] = useState<Record<ScrollPanel, boolean>>({ transcript: true, guidance: true })
   const sourceCaptures = useRef<Record<AudioSource, SourceCapture | null>>({ microphone: null, tab: null })
@@ -433,6 +435,15 @@ function HomePage() {
   const latestClientSegment = useRef<number | null>(null)
   const contextSummary = useRef({ value: '', through: 0 })
   const suggestionRequest = useRef(0)
+  const suggestionInFlight = useRef(false)
+  const queuedSuggestion = useRef<{ sessionId: string; sequenceNumber: number } | null>(null)
+  const lastSuggestionStartedAt = useRef(-Infinity)
+  const latestRemoteClosedAt = useRef(0)
+  const latestRemoteSpeechAt = useRef(0)
+  const latestUserSpeechAt = useRef(-Infinity)
+  const completedSegments = useRef(new Set<number>())
+  const completedThrough = useRef(0)
+  const [guidanceListening, setGuidanceListening] = useState(false)
   const pendingSuggestionTimer = useRef<number | null>(null)
   const transcriptScrollRef = useRef<HTMLDivElement>(null)
   const guidanceScrollRef = useRef<HTMLDivElement>(null)
@@ -529,7 +540,8 @@ function HomePage() {
     callSessionId.current = null
     latestClientSegment.current = null
     contextSummary.current = { value: '', through: 0 }
-    suggestionRequest.current += 1
+    invalidateSuggestion()
+    setGuidanceListening(false)
     setSuggestions([])
     setSuggestionLoading(false)
     setSuggestionError(null)
@@ -553,7 +565,8 @@ function HomePage() {
     callSessionId.current = null
     latestClientSegment.current = null
     contextSummary.current = { value: '', through: 0 }
-    suggestionRequest.current += 1
+    invalidateSuggestion()
+    setGuidanceListening(false)
     setSuggestions([])
     setSuggestionLoading(false)
     setSuggestionError(null)
@@ -584,6 +597,13 @@ function HomePage() {
         setPartialTranscript('microphone', '')
         setPartialTranscript('tab', '')
         nextSegment.current = 1
+        completedSegments.current.clear()
+        completedThrough.current = 0
+        latestRemoteClosedAt.current = 0
+        latestRemoteSpeechAt.current = 0
+        latestUserSpeechAt.current = -Infinity
+        lastSuggestionStartedAt.current = -Infinity
+        setGuidanceListening(false)
       }
       sessionStart.current = api.startCall(meetingTitleRef.current, preparation.current)
     }
@@ -612,18 +632,52 @@ function HomePage() {
     setTranscriptionErrors(current => ({ ...current, [source]: message }))
   }
 
-  function receiveAudioChunk(source: AudioSource, sessionId: string, audio: Blob) {
+  function invalidateSuggestion() {
+    cancelScheduledSuggestion()
+    queuedSuggestion.current = null
+    suggestionRequest.current += 1
+    setSuggestionLoading(suggestionInFlight.current)
+    setGuidanceListening(true)
+    setSuggestionError(null)
+  }
+
+  function noteUserSpeech(at: number) {
+    latestUserSpeechAt.current = Math.max(latestUserSpeechAt.current, at)
+    if (at >= latestRemoteSpeechAt.current) {
+      invalidateSuggestion()
+      setGuidanceListening(true)
+    }
+  }
+
+  function receiveAudioChunk(source: AudioSource, sessionId: string, audio: Blob, speechEndedAt = Date.now()) {
     if (!audio.size) return
+    const closedAt = Date.now()
     const sequenceNumber = nextSegment.current++
+    if (source === 'microphone') noteUserSpeech(speechEndedAt)
     const write = api.transcribeAudio(sessionId, source, sequenceNumber, audio).then(response => {
+      recordCallTiming('transcription', closedAt)
       if (callSessionId.current !== sessionId) return
       updateTranscriptionError(source, sessionId, sequenceNumber, null)
       const speaker = speakerForSource[source]
-      setLiveMessages(current => [...current, { speaker, time: formatDuration(elapsedSecondsRef.current), text: response.text, source }])
-      if (source === 'tab' && shouldSuggest(response.text)) scheduleSuggestion(sessionId, sequenceNumber)
-    }).catch(cause => updateTranscriptionError(source, sessionId, sequenceNumber, cause instanceof ApiError ? cause.message : 'Não foi possível transcrever este bloco. A call continua normalmente.'))
+      setLiveMessages(current => [...current, { speaker, time: formatDuration(elapsedSecondsRef.current), text: response.text, source, sequenceNumber }].sort((a, b) => a.sequenceNumber - b.sequenceNumber))
+      if (source === 'tab' && sequenceNumber > (latestClientSegment.current ?? 0)) {
+        latestClientSegment.current = sequenceNumber
+        latestRemoteClosedAt.current = closedAt
+        latestRemoteSpeechAt.current = speechEndedAt
+        invalidateSuggestion()
+        if (hasUsefulSpeech(response.text) && speechEndedAt > latestUserSpeechAt.current) scheduleSuggestion(sessionId, sequenceNumber)
+      }
+    }).catch(cause => {
+      recordCallTiming('transcription', closedAt, 'failed')
+      updateTranscriptionError(source, sessionId, sequenceNumber, cause instanceof ApiError ? cause.message : 'Não foi possível transcrever este bloco. A call continua normalmente.')
+    })
     pendingSegmentWrites.current.add(write)
-    void write.finally(() => pendingSegmentWrites.current.delete(write))
+    void write.finally(() => {
+      pendingSegmentWrites.current.delete(write)
+      if (callSessionId.current !== sessionId) return
+      completedSegments.current.add(sequenceNumber)
+      while (completedSegments.current.delete(completedThrough.current + 1)) completedThrough.current += 1
+    })
   }
 
   function cancelScheduledSuggestion() {
@@ -632,41 +686,66 @@ function HomePage() {
   }
 
   function scheduleSuggestion(sessionId: string, sequenceNumber: number) {
-    latestClientSegment.current = sequenceNumber
     cancelScheduledSuggestion()
+    const delay = Math.max(SUGGESTION_DELAY_MS, lastSuggestionStartedAt.current + SUGGESTION_INTERVAL_MS - Date.now())
     pendingSuggestionTimer.current = window.setTimeout(() => {
       pendingSuggestionTimer.current = null
-      if (latestClientSegment.current === sequenceNumber && callSessionId.current === sessionId) void generateSuggestion(sessionId, sequenceNumber)
-    }, SUGGESTION_PAUSE_MS)
+      if (latestClientSegment.current === sequenceNumber && callSessionId.current === sessionId
+          && latestRemoteSpeechAt.current > latestUserSpeechAt.current && !sourceCaptures.current.microphone?.speaking
+          && Date.now() - latestRemoteClosedAt.current <= SUGGESTION_MAX_AGE_MS) void generateSuggestion(sessionId, sequenceNumber)
+    }, delay)
   }
 
   async function waitForPendingSegments() {
     await Promise.all([...pendingSegmentWrites.current])
   }
 
-  async function generateSuggestion(sessionId: string, segmentNumber: number) {
+  async function generateSuggestion(sessionId: string, segmentNumber: number, manual = false) {
+    if (suggestionInFlight.current) {
+      if (!manual) queuedSuggestion.current = { sessionId, sequenceNumber: segmentNumber }
+      return
+    }
+    cancelScheduledSuggestion()
+    queuedSuggestion.current = null
+    suggestionInFlight.current = true
     const requestNumber = ++suggestionRequest.current
+    const startedAt = Date.now()
+    const originAt = manual ? startedAt : latestRemoteClosedAt.current
+    const summaryThrough = completedThrough.current
+    lastSuggestionStartedAt.current = startedAt
     setSuggestionLoading(true)
     setSuggestionError(null)
+    const stillCurrent = () => requestNumber === suggestionRequest.current && latestClientSegment.current === segmentNumber
+      && callSessionId.current === sessionId && Date.now() - originAt <= SUGGESTION_MAX_AGE_MS
+      && (manual || !sourceCaptures.current.microphone?.speaking)
     try {
       const response = await api.generateSuggestion(sessionId, contextSummary.current.value, contextSummary.current.through)
-      if (requestNumber === suggestionRequest.current && latestClientSegment.current === segmentNumber && callSessionId.current === sessionId) {
-        contextSummary.current = { value: response.contextSummary, through: response.summarizedThrough }
-        setSuggestions(current => [...current.filter(entry => entry.segmentNumber !== segmentNumber), { segmentNumber, suggestion: response }])
+      const current = stillCurrent()
+      recordCallTiming('suggestion', startedAt, current ? 'completed' : 'discarded')
+      if (current) {
+        // Never advance past an upload that was still pending when this request started.
+        contextSummary.current = { value: response.contextSummary, through: Math.min(response.summarizedThrough, summaryThrough) }
+        const listening = response.acao === 'OUVIR' || response.tipo === 'Ouvir'
+        setGuidanceListening(listening)
+        if (!listening) setSuggestions(current => [...current.filter(entry => entry.segmentNumber !== segmentNumber), { segmentNumber, suggestion: response }])
+        recordCallTiming('guidance', originAt)
       }
     } catch (cause) {
-      if (requestNumber === suggestionRequest.current && latestClientSegment.current === segmentNumber && callSessionId.current === sessionId) {
-        setSuggestionError(cause instanceof ApiError ? cause.message : 'Não foi possível gerar a sugestão agora. Tente novamente em instantes.')
-      }
+      recordCallTiming('suggestion', startedAt, 'failed')
+      if (stillCurrent()) setSuggestionError(cause instanceof ApiError ? cause.message : 'Não foi possível gerar a sugestão agora. Tente novamente em instantes.')
     } finally {
-      if (requestNumber === suggestionRequest.current) setSuggestionLoading(false)
+      suggestionInFlight.current = false
+      setSuggestionLoading(false)
+      const queued = queuedSuggestion.current as { sessionId: string; sequenceNumber: number } | null
+      queuedSuggestion.current = null
+      if (queued && queued.sessionId === callSessionId.current && queued.sequenceNumber === latestClientSegment.current) scheduleSuggestion(queued.sessionId, queued.sequenceNumber)
     }
   }
 
   function regenerateSuggestion() {
     const sessionId = callSessionId.current
     const segmentNumber = latestClientSegment.current
-    if (sessionId && segmentNumber) void generateSuggestion(sessionId, segmentNumber)
+    if (sessionId && segmentNumber) void generateSuggestion(sessionId, segmentNumber, true)
   }
 
   async function copySuggestion() {
@@ -678,11 +757,6 @@ function HomePage() {
     } catch {
       setError('Não foi possível copiar a sugestão agora.')
     }
-  }
-
-  function shouldSuggest(text: string) {
-    const value = text.trim().toLocaleLowerCase()
-    return /\?$|\b(como|quando|quanto|por que|porque|qual|quais|dúvida|duvida|não consigo|nao consigo|caro|orçamento|orcamento|não temos|nao temos|how|when|what|why|price|expensive|budget|not sure)\b/.test(value)
   }
 
   function tabTitleFrom(stream: MediaStream) {
@@ -723,15 +797,19 @@ function HomePage() {
     if (sourceCaptures.current[source] !== capture) return
     const recorder = new MediaRecorder(capture.audioStream, { mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 64000 })
     let finishRecording: () => void = () => undefined
+    capture.chunkStartedAt = Date.now()
+    capture.lastSpeechAt = 0
     capture.hasAudibleSignal = !capture.usesAudioActivityDetection
     capture.recorder = recorder
     capture.stopCompletion = new Promise(resolve => { finishRecording = resolve })
     recorder.ondataavailable = event => {
-      if (capture.hasAudibleSignal) receiveAudioChunk(source, sessionId, event.data)
+      recordCallTiming('capture', capture.chunkStartedAt, capture.hasAudibleSignal ? 'completed' : 'discarded')
+      if (capture.hasAudibleSignal) receiveAudioChunk(source, sessionId, event.data, capture.usesAudioActivityDetection ? capture.lastSpeechAt : Date.now())
     }
     recorder.onstop = () => {
       if (capture.recorder === recorder) {
         capture.recorder = null
+        if (capture.rotationTimer !== null) window.clearTimeout(capture.rotationTimer)
         capture.rotationTimer = null
       }
       finishRecording()
@@ -740,10 +818,10 @@ function HomePage() {
     recorder.start()
     capture.rotationTimer = window.setTimeout(() => {
       if (capture.recorder === recorder && recorder.state !== 'inactive') recorder.stop()
-    }, AUDIO_CHUNK_DURATION_MS)
+    }, AUDIO_CHUNK_MAX_MS)
   }
 
-  function observeAudioActivity(capture: SourceCapture) {
+  function observeAudioActivity(source: AudioSource, capture: SourceCapture) {
     try {
       const audioContext = new AudioContext()
       const analyser = audioContext.createAnalyser()
@@ -755,25 +833,45 @@ function HomePage() {
       const sample = () => {
         analyser.getByteTimeDomainData(samples)
         const rms = Math.sqrt(samples.reduce((sum, value) => sum + (value - 128) ** 2, 0) / samples.length)
-        if (rms >= SPEECH_RMS_THRESHOLD) capture.hasAudibleSignal = true
+        const now = Date.now()
+        if (rms >= SPEECH_RMS_THRESHOLD) {
+          capture.hasAudibleSignal = true
+          capture.lastSpeechAt = now
+          if (source === 'tab' && !capture.speaking) invalidateSuggestion()
+          if (source === 'microphone') {
+            if (!capture.speaking) noteUserSpeech(now)
+            latestUserSpeechAt.current = now
+          }
+          capture.speaking = true
+        } else if (now - capture.lastSpeechAt >= AUDIO_PAUSE_MS) {
+          capture.speaking = false
+          if (capture.hasAudibleSignal && now - capture.chunkStartedAt >= AUDIO_CHUNK_MIN_MS
+              && capture.recorder?.state === 'recording') capture.recorder.stop()
+        }
       }
       sample()
       capture.audioActivityTimer = window.setInterval(sample, AUDIO_ACTIVITY_SAMPLE_MS)
-      void audioContext.resume().catch(() => undefined)
+      void audioContext.resume().catch(() => {
+        capture.usesAudioActivityDetection = false
+        capture.hasAudibleSignal = true
+        if (capture.audioActivityTimer !== null) window.clearInterval(capture.audioActivityTimer)
+        capture.audioActivityTimer = null
+        console.warn('Audio activity detection unavailable; using timed capture.')
+      })
     } catch {
       // Browsers without Web Audio support keep the capture path available.
     }
   }
 
   async function connectSource(source: AudioSource, stream: MediaStream, session: { sessionId: string }) {
-    const capture: SourceCapture = { stream, audioStream: new MediaStream(stream.getAudioTracks()), recorder: null, rotationTimer: null, stopCompletion: null, audioContext: null, audioActivityTimer: null, usesAudioActivityDetection: false, hasAudibleSignal: true }
+    const capture: SourceCapture = { stream, audioStream: new MediaStream(stream.getAudioTracks()), recorder: null, rotationTimer: null, stopCompletion: null, audioContext: null, audioActivityTimer: null, usesAudioActivityDetection: false, hasAudibleSignal: true, chunkStartedAt: 0, lastSpeechAt: 0, speaking: false }
     sourceCaptures.current[source] = capture
     stream.getTracks().forEach(track => track.addEventListener('ended', () => {
       if (sourceCaptures.current[source]?.stream === stream) {
         void stopSource(source, source === 'tab' ? 'O compartilhamento de áudio da aba foi interrompido.' : 'O microfone foi interrompido.')
       }
     }))
-    observeAudioActivity(capture)
+    observeAudioActivity(source, capture)
     startAudioChunk(source, session.sessionId, capture)
     setSourceListening(source, true)
     setIsCallActive(true)
@@ -884,12 +982,12 @@ function HomePage() {
           {!displayedTranscript.length && !partialTranscripts.microphone && !partialTranscripts.tab && <p className="transcript-empty" role="status">Inicie o microfone ou compartilhe o áudio da aba. As falas transcritas aparecerão aqui.</p>}
           {displayedTranscript.map((message, index) => <article className={`message-row ${message.speaker === 'you' ? 'from-you' : 'from-client'}`} key={`${message.time}-${index}`}>
             {message.speaker === 'client' && <span className="message-avatar" aria-hidden="true">RC</span>}
-            <div className="message-content"><div className="message-meta"><strong>{message.speaker === 'you' ? 'Você' : 'Cliente'}</strong><time>{message.time}</time></div><p>{message.text}</p></div>
+            <div className="message-content"><div className="message-meta"><strong>{message.speaker === 'you' ? 'Você' : 'Interlocutor'}</strong><time>{message.time}</time></div><p>{message.text}</p></div>
             {message.speaker === 'you' && <span className="message-avatar you-avatar" aria-hidden="true">VO</span>}
           </article>)}
           {partialTranscripts.microphone && <article className="message-row from-you"><div className="message-content"><div className="message-meta"><strong>Você</strong><time>agora</time></div><p>{partialTranscripts.microphone}</p></div><span className="message-avatar you-avatar" aria-hidden="true">VO</span></article>}
-          {partialTranscripts.tab && <article className="message-row from-client"><span className="message-avatar" aria-hidden="true">RC</span><div className="message-content"><div className="message-meta"><strong>Cliente</strong><time>agora</time></div><p>{partialTranscripts.tab}</p></div></article>}
-          {isCallActive && <div className="typing-line"><span /><span /><span /> {microphoneOn && tabAudioOn ? 'Escutando você e o cliente…' : microphoneOn ? 'Escutando seu microfone…' : 'Escutando o áudio da aba…'}</div>}
+          {partialTranscripts.tab && <article className="message-row from-client"><span className="message-avatar" aria-hidden="true">RC</span><div className="message-content"><div className="message-meta"><strong>Interlocutor</strong><time>agora</time></div><p>{partialTranscripts.tab}</p></div></article>}
+          {isCallActive && <div className="typing-line"><span /><span /><span /> {microphoneOn && tabAudioOn ? 'Escutando você e o interlocutor…' : microphoneOn ? 'Escutando seu microfone…' : 'Escutando o áudio da aba…'}</div>}
           {!scrollFollowing.transcript && <button type="button" className="scroll-latest-button" onClick={() => scrollToLatest('transcript', 'smooth', true)}>Voltar ao mais recente <span aria-hidden="true">↓</span></button>}
         </div>
         <footer className="panel-footer"><span><Icon name="sound" size={16} />{tabAudioOn ? 'Escutando áudio da aba' : 'Áudio da aba desativado'}</span><span>Português (Brasil)</span></footer>
@@ -898,15 +996,16 @@ function HomePage() {
       <section className="workspace-panel guidance-panel" aria-labelledby="guidance-title">
         <header className="panel-header"><div><span className="panel-kicker ai-kicker"><Icon name="sparkles" size={17} />Orientação da IA</span><h2 id="guidance-title">Próxima melhor resposta</h2></div><span className="last-speech">Com base na última fala</span></header>
         <div className="guidance-scroll" ref={guidanceScrollRef} onScroll={() => handlePanelScroll('guidance')}>
-          {!currentSuggestion && !suggestionLoading && !suggestionError && <p className="guidance-empty" role="status">Aguardando a primeira fala do cliente para orientar sua próxima resposta.</p>}
-          {suggestionLoading && <p className="guidance-empty" role="status">Preparando uma sugestão para a última fala do cliente…</p>}
+          {!currentSuggestion && !guidanceListening && !suggestionLoading && !suggestionError && <p className="guidance-empty" role="status">Aguardando a primeira fala do interlocutor para orientar sua próxima resposta.</p>}
+          {guidanceListening && !suggestionLoading && <p className="guidance-empty" role="status">Continue ouvindo. Não é necessário intervir agora.</p>}
+          {suggestionLoading && <p className="guidance-empty" role="status">Preparando uma sugestão para a última fala do interlocutor…</p>}
           {isCallActive && suggestionError && <div className="guidance-empty guidance-error" role="status"><p>{suggestionError}</p><button type="button" className="subtle-button" onClick={regenerateSuggestion}>Tentar novamente</button></div>}
           {suggestions.map((entry, index) => <article className="suggestion-card" key={entry.segmentNumber}>
-            <div className="client-quote"><span aria-hidden="true">“</span><div><small>CLIENTE DISSE</small><p>{entry.suggestion.trechoCliente}</p></div></div>
-            <div className="suggestion-topline"><span className="suggestion-tag">{entry.suggestion.tipo}</span><span className="suggestion-context">{index === suggestions.length - 1 ? 'Baseada na última fala' : 'Sugestão anterior'}</span></div>
+            <div className="client-quote"><span aria-hidden="true">“</span><div><small>INTERLOCUTOR DISSE</small><p>{entry.suggestion.trechoCliente}</p></div></div>
+            <div className="suggestion-topline"><span className="suggestion-tag">{entry.suggestion.tipo}</span><span className="suggestion-context">{index === suggestions.length - 1 && !guidanceListening ? 'Baseada na última fala' : 'Sugestão anterior'}</span></div>
             <p className="suggested-response">{entry.suggestion.proximaFala}</p>
             <div className="key-points"><h3>O que vale manter na resposta</h3><ul>{entry.suggestion.pontosChave.map(point => <li key={point}>{point}</li>)}</ul></div>
-            {index === suggestions.length - 1 && <footer className="suggestion-actions"><button type="button" className="subtle-button" onClick={() => void copySuggestion()}><Icon name="copy" size={16} />{copied ? 'Copiado' : 'Copiar resposta'}</button><button type="button" className="subtle-button" onClick={regenerateSuggestion}><Icon name="sparkles" size={16} />Gerar outra</button><small>Gerada agora</small></footer>}
+            {index === suggestions.length - 1 && !guidanceListening && <footer className="suggestion-actions"><button type="button" className="subtle-button" onClick={() => void copySuggestion()}><Icon name="copy" size={16} />{copied ? 'Copiado' : 'Copiar resposta'}</button><button type="button" className="subtle-button" onClick={regenerateSuggestion}><Icon name="sparkles" size={16} />Gerar outra</button><small>Gerada agora</small></footer>}
           </article>)}
           {!scrollFollowing.guidance && <button type="button" className="scroll-latest-button" onClick={() => scrollToLatest('guidance', 'smooth', true)}>Voltar ao mais recente <span aria-hidden="true">↓</span></button>}
         </div>

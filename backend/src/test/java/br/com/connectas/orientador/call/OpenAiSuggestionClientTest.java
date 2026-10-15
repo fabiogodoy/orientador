@@ -91,6 +91,45 @@ class OpenAiSuggestionClientTest {
         verify(http, times(1)).send(any(), any(HttpResponse.BodyHandler.class));
     }
 
+    @Test
+    void supportsListeningWithoutInventingSpeechAndRejectsContradictoryAction() throws Exception {
+        var listening = new CallSuggestionResponse("Ouvir", "Vou explicar primeiro.", "", List.of(), "Entrevistador explica a vaga; candidato aguarda.", 0, "OUVIR");
+        respond(completed(mapper.writeValueAsString(listening)));
+        var result = generate();
+        assertEquals("OUVIR", result.acao());
+        assertEquals("Ouvir", result.tipo());
+        assertTrue(result.proximaFala().startsWith("Continue ouvindo"));
+        assertTrue(result.pontosChave().isEmpty());
+        for (var invalid : List.of(
+                new CallSuggestionResponse("Ouvir", "Trecho", "Faça uma pergunta", List.of(), "Resumo", 0, "OUVIR"),
+                new CallSuggestionResponse("Resposta", "Trecho", "", List.of(), "Resumo", 0, "FALAR"),
+                new CallSuggestionResponse("Ouvir", "Trecho", "Uma fala", List.of("Ponto"), "Resumo", 0, "FALAR"),
+                new CallSuggestionResponse("Resposta", "Trecho", "Resposta", List.of("Ponto"), "Resumo", 0, "INVALID"))) {
+            respond(completed(mapper.writeValueAsString(invalid)));
+            assertThrows(OpenAiSuggestionClient.SuggestionUnavailableException.class, this::generate);
+        }
+    }
+
+    @Test
+    void sendsNeutralRolesAndContextualInstructionsForCandidateWithoutExtraRequest() throws Exception {
+        respond(completed(mapper.writeValueAsString(suggestion)));
+        client.generate(user, "", new CallPreparation("Sou candidato em entrevista de emprego", null, null),
+                List.of(new SuggestionContextSegment(1, TranscriptSpeaker.CLIENT, "Conte sua experiência."),
+                        new SuggestionContextSegment(2, TranscriptSpeaker.USER, "Trabalhei com atendimento.")), 2);
+        var capture = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(http, times(1)).send(capture.capture(), any(HttpResponse.BodyHandler.class));
+        var body = mapper.readTree(requestBody(capture.getValue()));
+        String input = body.path("input").asText();
+        assertTrue(input.contains("participante=\"interlocutor\""));
+        assertTrue(input.contains("participante=\"usuario\""));
+        assertTrue(input.contains("Sou candidato"));
+        assertFalse(input.contains("participante=\"vendedor\""));
+        assertTrue(OpenAiSuggestionClient.INSTRUCTIONS.contains("não devolva uma pergunta por padrão"));
+        assertTrue(OpenAiSuggestionClient.INSTRUCTIONS.contains("não há nova demanda"));
+        assertTrue(OpenAiSuggestionClient.INSTRUCTIONS.contains("nunca invente"));
+        assertEquals("OUVIR", body.at("/text/format/schema/properties/acao/enum/1").asText());
+    }
+
     private CallSuggestionResponse generate() {
         return client.generate(user, "", new CallPreparation(null, null, null), List.of(new SuggestionContextSegment(1, TranscriptSpeaker.CLIENT, "Qual é o prazo?")), 1);
     }

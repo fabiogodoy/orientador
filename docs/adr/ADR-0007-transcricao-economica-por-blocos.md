@@ -114,3 +114,9 @@ Revisar esta ADR quando ocorrer qualquer um: crescimento de calls simultâneas, 
 ## Ajuste de orçamento — 2026-10-14
 
 O teto de saída passa de 400 para 1.200 tokens, com resumo interno compacto de até 1.200 caracteres e tratamento explícito de respostas incompletas, conforme `intent/sugestoes-respostas-incompletas_prd.md`, aprovado pelo usuário. Não há mudança de modelo, persistência ou integração.
+
+## Ajuste de tempo e contexto — 2026-10-15
+
+Conforme `intent/orientacao-agil-contextual_prd.md` e confirmação do usuário, blocos passam a ter teto de 8 s, mínimo de 5 s para antecipação em pausa de 750 ms. Debounce de sugestão 300 ms, intervalo automático mínimo 5 s, uma chamada pendente e invalidação de orientações obsoletas. A orientação deixa de presumir vendas e pode indicar ouvir. Fornecedores, modelos e teto de 1.200 tokens preservados.
+
+A [Groq](https://console.groq.com/docs/speech-to-text) documenta cobrança mínima de 10 s/envio (consultado 2026-10-15): aceitamos overhead para ganhar tempo, limitando fragmentação. A [OpenAI](https://developers.openai.com/api/docs/guides/latency-optimization) recomenda reduzir saída e requisições; solicitamos texto conciso sem reduzir o teto e reintroduzir corte. São metas locais, não SLA ou medição real de provedores.
