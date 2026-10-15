@@ -1,6 +1,7 @@
 import { AUDIO_CHUNK_MAX_MS, AUDIO_CHUNK_MIN_MS, AUDIO_PAUSE_MS, SUGGESTION_DELAY_MS, SUGGESTION_INTERVAL_MS, SUGGESTION_MAX_AGE_MS, recordCallTiming, hasUsefulSpeech } from './callTiming'
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { TrialNotice } from './TrialNotice'
 import { ExecutiveSummaryExportButton } from './ExecutiveSummaryExportButton'
 import type { SummaryMetadata } from './executiveSummaryDocument'
 import logoUrl from '../../assets/brand/orientador-logo.svg'
@@ -87,8 +88,9 @@ function AuthenticatedShell({ account, onAccountChange, children }: { account: A
       <button type="button" className="sidebar-toggle" aria-label="Abrir menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}>☰</button>
       {menuOpen && <button type="button" className="sidebar-backdrop" aria-label="Fechar menu" onClick={closeMenu} />}
       <aside ref={sidebarRef} className={`app-sidebar ${menuOpen ? 'is-open' : ''}`} aria-label="Navegação principal">
-        <div><a className="sidebar-brand" href={routes.home} onClick={closeMenu}><img src={logoUrl} alt="Orientador" /></a><button type="button" className="sidebar-close" aria-label="Fechar menu" onClick={closeMenu}>×</button></div>
+        <div><a className="sidebar-brand" href={routes.home} onClick={closeMenu}><img src={logoLightUrl} alt="Orientador" /></a><button type="button" className="sidebar-close" aria-label="Fechar menu" onClick={closeMenu}>×</button></div>
         <nav><a href={routes.meetings} aria-current={path === routes.meetings ? 'page' : undefined} onClick={closeMenu}>Reuniões</a><a href={routes.knowledgeBases} aria-current={path === routes.knowledgeBases ? 'page' : undefined} onClick={closeMenu}>Bases de conhecimento</a><button type="button" onClick={() => { closeMenu(); setProfileOpen(true) }}>Perfil</button></nav>
+        <TrialNotice trialEndsAt={account.trialEndsAt} />
         <button type="button" className="sidebar-logout" onClick={() => void logout()}>Sair</button>
       </aside>
       <div className="authenticated-content">{children}</div>
@@ -954,16 +956,19 @@ function HomePage() {
     <ErrorNotice message={error} />
     <ErrorNotice message={transcriptionErrors.microphone ? `Microfone: ${transcriptionErrors.microphone}` : null} />
     <ErrorNotice message={transcriptionErrors.tab ? `Áudio da aba: ${transcriptionErrors.tab}` : null} />
-    <header className="call-topbar">
+    <header className="call-topbar" aria-label="Sua conta">
       <a className="call-brand" href={routes.home} aria-label="Orientador — tela da call"><img src={logoUrl} alt="Orientador" /></a>
+      <button type="button" className="client-identity" onClick={() => setProfileOpen(true)} aria-label="Abrir seu perfil"><span className="client-avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : initials(account.name)}</span><span><strong>{account.name}</strong><small>{accountContext}</small></span></button>
+    </header>
+    <section className="meeting-toolbar" aria-label="Controles da reunião">
       <div className="call-context">
-        <span className={`live-status ${isCallActive ? 'is-live' : 'is-ended'}`}><span />{callStatus}</span>
-        <span className="call-timer"><Icon name="clock" size={16} />{formatDuration(elapsedSeconds)}</span>
-        <span className="context-divider" aria-hidden="true" />
         <div className="meeting-title">
           {editingMeetingTitle ? <form onSubmit={saveMeetingTitle}><label htmlFor="meeting-title">Título da reunião</label><input id="meeting-title" value={meetingTitleDraft} maxLength={160} onChange={event => setMeetingTitleDraft(event.target.value)} autoFocus /><button type="submit">Salvar</button></form> : <><span>Reunião</span><strong title={meetingTitle}>{meetingTitle}</strong><button type="button" onClick={() => { setMeetingTitleDraft(meetingTitle); setEditingMeetingTitle(true) }}>Editar título da reunião</button></>}
         </div>
-        <button type="button" className="client-identity" onClick={() => setProfileOpen(true)} aria-label="Abrir seu perfil"><span className="client-avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : initials(account.name)}</span><span><strong>{account.name}</strong><small>{accountContext}</small></span></button>
+        <div className="meeting-status">
+          <span className={`live-status ${isCallActive ? 'is-live' : 'is-ended'}`}><span />{callStatus}</span>
+          <span className="call-timer"><Icon name="clock" size={16} />{formatDuration(elapsedSeconds)}</span>
+        </div>
       </div>
       <div className="call-actions">
         <button type="button" className={`icon-control ${microphoneOn ? 'is-on' : ''}`} aria-label={microphoneOn ? 'Parar de escutar microfone' : 'Escutar microfone'} aria-pressed={microphoneOn} onClick={() => void toggleMicrophone()}><Icon name="microphone" /></button>
@@ -972,7 +977,7 @@ function HomePage() {
         <button type="button" className={`end-button ${isCallActive ? '' : 'restart-button'}`} onClick={() => void toggleCall()}><Icon name="phone" />{isCallActive ? 'Encerrar call' : 'Iniciar call'}</button>
         <div className="settings-wrap"><button type="button" className="icon-control" aria-label="Abrir configurações da call" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(value => !value)}><Icon name="settings" /></button>{settingsOpen && <div className="settings-popover"><strong>Privacidade da call</strong><span>O áudio serve apenas à transcrição em tempo real; o Orientador mantém somente o texto final.</span><a className="settings-link" href={routes.knowledgeBases}>Bases de conhecimento</a></div>}</div>
       </div>
-    </header>
+    </section>
 
     <main className="call-workspace">
       <section className="workspace-panel transcript-panel" aria-labelledby="transcript-title">

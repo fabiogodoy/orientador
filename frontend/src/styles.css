@@ -102,23 +102,27 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .loading-page { display: grid; min-height: 100vh; place-items: center; color: #52777b; }
 
 .call-page { min-height: 100vh; color: #183d4a; background: #eef6f4; }
-.call-topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 28px; min-height: 82px; padding: 14px clamp(20px, 3.3vw, 58px); border-bottom: 1px solid #dce8e5; background: #fffffff2; backdrop-filter: blur(14px); }
+.call-topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 76px; padding: 14px clamp(20px, 3.3vw, 58px); border-bottom: 1px solid #dce8e5; background: #fffffff2; backdrop-filter: blur(14px); }
+.call-topbar .call-brand { padding: 0; border: 0; }
+.call-topbar .client-identity { margin-left: auto; max-width: min(55%, 360px); }
+.client-identity > span:last-child { min-width: 0; }
+.meeting-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 18px 28px; padding: 20px clamp(20px, 3.3vw, 58px); border-bottom: 1px solid #dce8e5; background: #f8fcfa; }
+.meeting-status { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .call-brand { display: inline-flex; flex: none; align-items: center; padding-right: 26px; border-right: 1px solid #e1ece9; }
 .call-brand img { display: block; width: 142px; }
-.call-context { display: flex; align-items: center; gap: 18px; min-width: 0; }
+.call-context { display: flex; flex: 1 1 420px; flex-wrap: wrap; align-items: center; gap: 18px; min-width: 0; }
 .live-status { display: inline-flex; align-items: center; gap: 8px; flex: none; padding: 8px 11px; border-radius: 999px; color: #25806c; background: #e7f8f0; font-size: .78rem; font-weight: 800; }
 .live-status > span { width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 4px #38b79020; }
 .live-status.is-ended { color: #9a6572; background: #fbeff1; }
 .call-timer { display: inline-flex; align-items: center; gap: 7px; flex: none; color: #527078; font-size: .93rem; font-weight: 800; font-variant-numeric: tabular-nums; }
-.context-divider { width: 1px; height: 32px; background: #e0eae7; }
-.meeting-title { display: grid; min-width: 0; gap: 2px; }
+.meeting-title { display: grid; flex: 1 1 200px; min-width: 0; gap: 5px; }
 .meeting-title > span, .meeting-title label { color: #93a5a7; font-size: .62rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
-.meeting-title > strong { overflow: hidden; max-width: 190px; color: #315560; font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
+.meeting-title > strong { color: #315560; font-size: 1rem; line-height: 1.4; overflow-wrap: anywhere; }
 .meeting-title > button { width: fit-content; padding: 0; border: 0; color: #23816d; background: transparent; font-size: .67rem; font-weight: 800; text-align: left; }
 .meeting-title form { display: flex; align-items: center; gap: 6px; }
 .meeting-title form label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-.meeting-title input { width: 170px; height: 30px; padding: 0 8px; border: 1px solid #9ed8c9; border-radius: 7px; color: #315560; font: inherit; outline: none; }
-.meeting-title form button { height: 30px; padding: 0 8px; border: 0; border-radius: 7px; color: #fff; background: #248976; font-size: .7rem; font-weight: 800; }
+.meeting-title input { flex: 1; min-width: 0; width: 100%; height: 36px; padding: 0 8px; border: 1px solid #9ed8c9; border-radius: 7px; color: #315560; font: inherit; }
+.meeting-title form button { flex: none; height: 36px; padding: 0 8px; border: 0; border-radius: 7px; color: #fff; background: #248976; font-size: .7rem; font-weight: 800; }
 .client-identity { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 4px; border: 0; border-radius: 10px; color: inherit; background: transparent; text-align: left; }
 .client-identity:hover { background: #f1f8f6; }
 .client-avatar, .message-avatar { display: grid; flex: none; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: #fff; background: linear-gradient(135deg, #2dbdd0, #2384a7); font-size: .65rem; font-weight: 850; letter-spacing: .04em; }
@@ -127,7 +131,9 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .client-identity strong, .client-identity small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .client-identity strong { font-size: .83rem; }
 .client-identity small { margin-top: 3px; color: #80989c; font-size: .7rem; }
-.call-actions { display: flex; align-items: center; gap: 9px; margin-left: auto; }
+.call-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-left: auto; }
+.call-actions > button, .call-actions .settings-wrap { flex: none; }
+.call-actions .suggest-button, .call-actions .end-button { white-space: nowrap; }
 .history-link { display: inline-flex; align-items: center; gap: 7px; height: 42px; padding: 0 12px; border: 1px solid #dce8e5; border-radius: 11px; color: #48676d; background: #fff; font-size: .78rem; font-weight: 800; text-decoration: none; }
 .history-link:hover { border-color: #9fe0cd; color: #177f70; background: #effbf7; }
 .icon-control { display: grid; place-items: center; width: 42px; height: 42px; padding: 0; border: 1px solid #dce8e5; border-radius: 11px; color: #5e747b; background: #fff; transition: .2s ease; }
@@ -140,12 +146,12 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .end-button:hover { background: #ffe8ec; }
 .restart-button { color: #23816d; background: #ebfaf3; border-color: #c7ebde; }
 .settings-wrap { position: relative; }
-.settings-popover { position: absolute; top: 52px; right: 0; display: grid; gap: 4px; width: 230px; padding: 14px; border: 1px solid #dceae6; border-radius: 12px; color: #5c747b; background: #fff; box-shadow: 0 18px 42px #214e5724; font-size: .76rem; line-height: 1.45; }
+.settings-popover { position: absolute; z-index: 6; top: 52px; right: 0; display: grid; gap: 4px; width: 230px; padding: 14px; border: 1px solid #dceae6; border-radius: 12px; color: #5c747b; background: #fff; box-shadow: 0 18px 42px #214e5724; font-size: .76rem; line-height: 1.45; }
 .settings-popover strong { color: #234651; font-size: .8rem; }
 .settings-link { padding: 7px 0 0; border: 0; color: #197f70; background: transparent; font-size: .75rem; font-weight: 800; text-align: left; }
 .settings-link:hover { color: #105e53; }
 .logout-button { margin-top: 7px; padding: 7px 0 0; border: 0; border-top: 1px solid #edf1f0; color: #197f70; background: transparent; font-size: .75rem; font-weight: 800; text-align: left; }
-.call-workspace { display: grid; grid-template-columns: minmax(0, 1.01fr) minmax(440px, .99fr); gap: 20px; max-width: 1520px; min-height: calc(100vh - 132px); margin: 0 auto; padding: clamp(18px, 2.4vw, 34px) clamp(18px, 3.3vw, 58px) 22px; }
+.call-workspace { display: grid; grid-template-columns: minmax(0, 1.01fr) minmax(440px, .99fr); gap: 20px; max-width: 1520px; min-height: calc(100vh - 242px); margin: 0 auto; padding: clamp(18px, 2.4vw, 34px) clamp(18px, 3.3vw, 58px) 22px; }
 .workspace-panel { display: flex; flex-direction: column; min-height: 680px; overflow: hidden; border: 1px solid #dce9e5; border-radius: 20px; background: #fff; box-shadow: 0 12px 38px #1f575e0b; }
 .panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; padding: 22px 24px 18px; border-bottom: 1px solid #e9f0ee; }
 .panel-kicker { display: flex; align-items: center; gap: 8px; color: #52727a; font-size: .79rem; font-weight: 800; }
@@ -314,13 +320,18 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 
 .authenticated-shell { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100vh; background: #f5f9f7; }
 .authenticated-content { min-width: 0; }
-.app-sidebar { position: sticky; top: 0; display: flex; flex-direction: column; height: 100vh; padding: 28px 16px 18px; color: #dcedea; background: #123d4a; box-sizing: border-box; }
+.app-sidebar { position: sticky; top: 0; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow-y: auto; padding: 28px 16px 18px; color: #dcedea; background: #123d4a; box-sizing: border-box; }
 .sidebar-brand { display: inline-flex; padding: 4px 10px 30px; }
-.sidebar-brand img { width: 150px; filter: brightness(0) invert(1); }
+.sidebar-brand img { display: block; width: 150px; }
 .app-sidebar nav { display: grid; gap: 6px; }
 .app-sidebar nav a, .app-sidebar nav button, .sidebar-logout { width: 100%; padding: 12px 13px; border: 0; border-radius: 9px; color: #dcedea; background: transparent; font: inherit; font-size: .84rem; font-weight: 760; text-align: left; text-decoration: none; cursor: pointer; }
 .app-sidebar nav a:hover, .app-sidebar nav button:hover, .app-sidebar nav a[aria-current="page"] { color: #fff; background: #2b6971; }
-.sidebar-logout { margin-top: auto; color: #fff; background: #b95065; }
+.sidebar-trial { margin-top: auto; padding: 22px 12px 18px; }
+.sidebar-trial > span { display: block; color: #a7c7c7; font-size: .65rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.sidebar-trial strong { display: block; margin-top: 7px; color: #5fe0c1; font-size: .95rem; line-height: 1.4; }
+.sidebar-trial p { margin: 8px 0; color: #dcedea; font-size: .73rem; line-height: 1.6; }
+.sidebar-trial small { color: #a7c7c7; font-size: .68rem; }
+.sidebar-logout { flex: none; color: #fff; background: #b95065; }
 .sidebar-logout:hover { background: #a53e52; }
 .sidebar-toggle, .sidebar-close, .sidebar-backdrop { display: none; }
 
@@ -383,7 +394,6 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 }
 
 @media (max-width: 980px) {
-  .call-topbar { flex-wrap: wrap; }
   .call-actions { margin-left: auto; }
   .call-workspace { grid-template-columns: minmax(0, 1fr); min-height: auto; }
   .workspace-panel { min-height: 590px; }
@@ -391,20 +401,23 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 }
 
 @media (max-width: 660px) {
-  .call-topbar { gap: 12px; min-height: auto; padding: 13px 16px; }
+  .call-topbar { gap: 12px; }
+  .meeting-toolbar { padding: 18px 16px; gap: 18px; }
   .call-brand { padding: 0; border: 0; }
   .call-brand img { width: 125px; }
-  .call-context { width: 100%; gap: 10px; order: 3; }
+  .call-context { gap: 14px; }
   .client-identity { margin-left: auto; }
   .client-identity > span:last-child { min-width: 0; }
-  .client-identity strong { max-width: 72px; }
-  .context-divider, .client-identity small { display: none; }
-  .meeting-title { flex: 1; }
-  .meeting-title > strong { max-width: 150px; }
-  .meeting-title input { width: min(150px, 42vw); }
-  .call-actions { gap: 7px; }
+  .client-identity small { display: none; }
+  .call-actions { position: relative; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; width: 100%; margin-left: 0; }
+  .call-actions > .icon-control { grid-column: span 2; width: 100%; }
+  .call-actions .suggest-button { grid-column: 1 / span 3; }
+  .call-actions .end-button { grid-column: 4 / span 3; }
+  .call-actions .settings-wrap { position: static; grid-column: 5 / span 2; grid-row: 1; }
+  .call-actions .settings-wrap .icon-control { width: 100%; }
+  .settings-popover { top: calc(100% + 10px); max-width: calc(100vw - 32px); }
   .icon-control { width: 38px; height: 38px; }
-  .suggest-button, .end-button { width: 38px; padding: 0; font-size: 0; }
+  .suggest-button, .end-button { min-height: 38px; padding: 0 10px; font-size: .75rem; }
   .suggest-button svg, .end-button svg { width: 19px; height: 19px; }
   .call-workspace { gap: 14px; padding: 14px 12px 18px; }
   .workspace-panel { min-height: 540px; border-radius: 15px; }
@@ -422,4 +435,10 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
   .suggestion-actions { flex-wrap: wrap; padding: 12px 13px; }
   .suggestion-actions small { width: 100%; margin: 2px 0 0; }
   .panel-footer { padding: 12px 16px; }
+}
+
+@media (max-width: 850px) {
+  .call-topbar { min-height: 72px; padding: 13px 16px 13px 72px; }
+  .call-topbar .call-brand img { width: clamp(90px, 20vw, 142px); }
+  .call-topbar .client-identity { max-width: 55%; }
 }
