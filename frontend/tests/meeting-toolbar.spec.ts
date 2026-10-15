@@ -41,7 +41,7 @@ test('separa conta e reunião, mantém título longo e controles sem sobreposiç
   await page.getByRole('button', { name: 'Salvar', exact: true }).click()
   await expect(toolbar.getByText(title, { exact: true })).toBeVisible()
   await expect(header.getByRole('button', { name: 'Abrir seu perfil' })).toBeVisible()
-  await expect(header.getByRole('button')).toHaveCount(1)
+  await expect(header.getByRole('button')).toHaveCount(2)
 
   for (const width of [1920, 1440, 1180, 1024, 851, 850, 768, 390, 320]) {
     await page.setViewportSize({ width, height: 900 })

@@ -12,7 +12,7 @@ Nunca reutilizar um número já listado, mesmo que o trabalho tenha sido feito e
 
 ## Próximo número livre
 
-`ADR-0011`
+`ADR-0012`
 
 ## ADRs registradas
 
@@ -28,3 +28,5 @@ Nunca reutilizar um número já listado, mesmo que o trabalho tenha sido feito e
 | ADR-0008 | Preparação por call e bases de conhecimento por tenant | `intent/preparacao-e-bases-de-conhecimento.md` |
 | ADR-0009 | Exclusão lógica auditável de bases de conhecimento | `intent/administracao-bases-de-conhecimento.md` |
 | ADR-0010 | Exportação PDF no navegador | `intent/resumo-executivo-pdf.md` |
+
+| ADR-0011 | Custos por operação e conversão PTAX | `intent/tela-custos.md` |

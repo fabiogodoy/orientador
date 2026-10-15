@@ -34,7 +34,8 @@ class CallServiceSuggestionTest {
     private final CallSuggestionGenerator generator = mock(CallSuggestionGenerator.class);
     private final KnowledgeBaseService knowledgeBases = mock(KnowledgeBaseService.class);
     private final MeetingAnalysisGenerator analyses = mock(MeetingAnalysisGenerator.class);
-    private final CallService service = new CallService(jdbc, accounts, transcriptions, generator, knowledgeBases, analyses, Clock.fixed(Instant.EPOCH, ZoneOffset.UTC));
+    private final br.com.connectas.orientador.cost.UsageCostRecorder costs = mock(br.com.connectas.orientador.cost.UsageCostRecorder.class);
+    private final CallService service = new CallService(jdbc, accounts, transcriptions, generator, knowledgeBases, analyses, Clock.fixed(Instant.EPOCH, ZoneOffset.UTC), costs);
 
     @Test
     void generatesOnlyFromAuthorizedOrderedCallSegments() {
@@ -46,11 +47,22 @@ class CallServiceSuggestionTest {
                 new SuggestionContextSegment(2, TranscriptSpeaker.CLIENT, "Tenho uma dúvida"));
         when(jdbc.query(anyString(), any(RowMapper.class), eq(callId), eq(tenantId), eq(0))).thenReturn(segments);
         CallSuggestionResponse expected = new CallSuggestionResponse("Objeção", "Tenho uma dúvida", "Claro, qual ponto é mais importante para você?", List.of("Entenda a dúvida"), "Resumo", 2);
-        when(generator.generate(eq(userId), anyString(), any(CallPreparation.class), anyList(), anyInt())).thenReturn(expected);
+        when(generator.generateMetered(eq(userId), anyString(), any(CallPreparation.class), anyList(), anyInt(), any())).thenReturn(expected);
 
         when(jdbc.queryForObject(anyString(), eq(Integer.class), eq(callId), eq(tenantId))).thenReturn(1, 2);
         assertEquals(expected, service.suggest(userId, callId, new CallSuggestionRequest("", 0)));
-        verify(generator).generate(eq(userId), eq(""), any(CallPreparation.class), anyList(), eq(2));
+        var order = org.mockito.Mockito.inOrder(costs, generator);
+        order.verify(costs).begin(identity, callId, "SUGGESTION");
+        order.verify(generator).generateMetered(eq(userId), eq(""), any(CallPreparation.class), anyList(), eq(2), any());
+    }
+
+    @Test void unauthorizedCallCannotGenerateCostOrContactProvider() {
+        Identity identity = new Identity(userId, tenantId, "Pessoa", "pessoa@example.com", Role.INDIVIDUAL, AccountType.INDIVIDUAL, null, Instant.MAX, null);
+        when(accounts.currentIdentity(userId)).thenReturn(identity);
+        when(jdbc.queryForObject(anyString(), eq(Integer.class), eq(callId), eq(tenantId), eq(userId))).thenReturn(0);
+        assertThrows(CallService.CallNotFoundException.class, () -> service.suggest(userId, callId, new CallSuggestionRequest("",0)));
+        assertThrows(CallService.CallNotFoundException.class, () -> service.transcribe(userId, callId, CaptureSource.microphone, 1, new java.io.ByteArrayInputStream(new byte[]{1})));
+        org.mockito.Mockito.verifyNoInteractions(costs, generator, transcriptions);
     }
 
     @Test
@@ -63,5 +75,6 @@ class CallServiceSuggestionTest {
 
         when(jdbc.queryForObject(anyString(), eq(Integer.class), eq(callId), eq(tenantId))).thenReturn(0);
         assertThrows(CallService.SuggestionContextUnavailableException.class, () -> service.suggest(userId, callId, new CallSuggestionRequest("", 0)));
+        org.mockito.Mockito.verifyNoInteractions(costs, generator);
     }
 }

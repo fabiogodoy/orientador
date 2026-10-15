@@ -65,6 +65,12 @@ public class OpenAiSuggestionClient implements CallSuggestionGenerator {
 
     @Override
     public CallSuggestionResponse generate(UUID userId, String summary, CallPreparation preparation, List<SuggestionContextSegment> segments, int summarizedThrough) {
+        return generateMetered(userId, summary, preparation, segments, summarizedThrough, usage -> {});
+    }
+
+    @Override
+    public CallSuggestionResponse generateMetered(UUID userId, String summary, CallPreparation preparation, List<SuggestionContextSegment> segments, int summarizedThrough,
+            java.util.function.Consumer<br.com.connectas.orientador.cost.ProviderUsage> onUsage) {
         if (apiKey.isBlank()) {
             log.warn("Suggestion unavailable reason=api_key_missing");
             throw new SuggestionUnavailableException();
@@ -84,6 +90,7 @@ public class OpenAiSuggestionClient implements CallSuggestionGenerator {
                 log.warn("Suggestion unavailable reason=provider_rejected status={}", response.statusCode());
                 throw new SuggestionUnavailableException();
             }
+            onUsage.accept(br.com.connectas.orientador.cost.ProviderUsage.suggestion(mapper.readTree(response.body())));
             CallSuggestionResponse suggestion = mapper.readValue(extractOutputText(response.body()), CallSuggestionResponse.class);
             validate(suggestion);
             return new CallSuggestionResponse(suggestion.tipo(), suggestion.trechoCliente(), "OUVIR".equals(suggestion.acao()) ? "Continue ouvindo; não é necessário intervir agora." : suggestion.proximaFala(), suggestion.pontosChave(), suggestion.contextSummary(), summarizedThrough, suggestion.acao());

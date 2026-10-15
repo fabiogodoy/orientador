@@ -130,6 +130,15 @@ class OpenAiSuggestionClientTest {
         assertEquals("OUVIR", body.at("/text/format/schema/properties/acao/enum/1").asText());
     }
 
+    @Test
+    void metersIncompleteResponseBeforeRejectingItsContent() throws Exception {
+        respond("{\"status\":\"incomplete\",\"usage\":{\"input_tokens\":1000,\"output_tokens\":1200}}");
+        var usage = new java.util.concurrent.atomic.AtomicReference<br.com.connectas.orientador.cost.ProviderUsage>();
+        assertThrows(OpenAiSuggestionClient.SuggestionUnavailableException.class,
+                () -> client.generateMetered(user, "", new CallPreparation(null,null,null), List.of(), 0, usage::set));
+        assertEquals(new java.math.BigDecimal("0.000700000000"), usage.get().costUsd());
+    }
+
     private CallSuggestionResponse generate() {
         return client.generate(user, "", new CallPreparation(null, null, null), List.of(new SuggestionContextSegment(1, TranscriptSpeaker.CLIENT, "Qual é o prazo?")), 1);
     }

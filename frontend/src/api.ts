@@ -1,3 +1,4 @@
+import type { CostPeriod, CostReport } from './costTypes'
 export const TERMS_VERSION = '2026-10-10'
 
 export type AccountType = 'INDIVIDUAL' | 'ORGANIZATION'
@@ -105,6 +106,7 @@ async function uploadAudio(sessionId: string, source: 'microphone' | 'tab', sequ
 }
 
 export const api = {
+  costs: (period: CostPeriod, page = 0) => request<CostReport>(`/api/costs?period=${period}&page=${page}`, 'GET'),
   register: (data: Registration) => request<Account>('/api/auth/register', 'POST', data),
   login: (email: string, password: string) => request<Account>('/api/auth/login', 'POST', { email, password }),
   me: () => request<Account>('/api/auth/me', 'GET'),

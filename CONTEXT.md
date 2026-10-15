@@ -131,3 +131,11 @@ _Evitar_: cliente como papel universal
 **Momento de ouvir:**
 Situação em que a orientação adequada é deixar o interlocutor continuar, sem propor uma fala ou pergunta ao usuário.
 _Evitar_: erro de geração, ausência de contexto
+
+**Custo estimado:**
+Valor calculado do consumo identificado de transcrição e sugestões pelas tarifas dos provedores. Não é uma fatura nem inclui análise executiva, impostos ou créditos.
+_Evitar_: valor cobrado, fatura
+
+**Custo não disponível:**
+Consumo sem informação suficiente para calcular uma estimativa, inclusive calls anteriores ao início da medição. Não equivale a custo zero.
+_Evitar_: gratuito

@@ -29,8 +29,9 @@ public class CallService {
     private final MeetingAnalysisGenerator analyses;
     private final ObjectMapper mapper;
     private final Clock clock;
-    CallService(JdbcTemplate jdbc, AccountService accounts, GroqTranscriptionClient transcriptions, CallSuggestionGenerator suggestions, KnowledgeBaseService knowledgeBases, MeetingAnalysisGenerator analyses, Clock clock) {
-        this.jdbc = jdbc; this.accounts = accounts; this.transcriptions = transcriptions; this.suggestions = suggestions; this.knowledgeBases = knowledgeBases; this.analyses = analyses; this.clock = clock; this.mapper = new ObjectMapper();
+    private final br.com.connectas.orientador.cost.UsageCostRecorder costs;
+    CallService(JdbcTemplate jdbc, AccountService accounts, GroqTranscriptionClient transcriptions, CallSuggestionGenerator suggestions, KnowledgeBaseService knowledgeBases, MeetingAnalysisGenerator analyses, Clock clock, br.com.connectas.orientador.cost.UsageCostRecorder costs) {
+        this.costs = costs; this.jdbc = jdbc; this.accounts = accounts; this.transcriptions = transcriptions; this.suggestions = suggestions; this.knowledgeBases = knowledgeBases; this.analyses = analyses; this.clock = clock; this.mapper = new ObjectMapper();
     }
 
     @Transactional
@@ -40,7 +41,7 @@ public class CallService {
         String title = normalizeTitle(requestedTitle);
         String context = normalizeOptional(requestedContext);
         KnowledgeBaseService.KnowledgeBaseSnapshot base = knowledgeBaseId == null ? null : knowledgeBases.snapshot(identity, knowledgeBaseId);
-        jdbc.update("insert into call_sessions (id, tenant_id, user_id, title, meeting_context, knowledge_base_name, knowledge_base_content, status, started_at) values (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)", id, identity.tenantId(), identity.id(), title, context, base == null ? null : base.name(), base == null ? null : base.content(), Timestamp.from(now));
+        jdbc.update("insert into call_sessions (id, tenant_id, user_id, title, meeting_context, knowledge_base_name, knowledge_base_content, status, started_at, cost_tracking_started_at) values (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)", id, identity.tenantId(), identity.id(), title, context, base == null ? null : base.name(), base == null ? null : base.content(), Timestamp.from(now), Timestamp.from(now));
         log.info("Chunk transcription started callId={} tenantId={} hasMeetingContext={} hasKnowledgeBase={}", id, identity.tenantId(), context != null, base != null);
         return new CallSessionResponse(id, title);
     }
@@ -68,7 +69,8 @@ public class CallService {
         byte[] audio = input.readNBytes(2 * 1024 * 1024 + 1);
         if (audio.length == 0 || audio.length > 2 * 1024 * 1024) throw new InvalidAudioChunkException();
         try {
-            String text = transcriptions.transcribe(audio);
+            UUID operation = costs.begin(identity, sessionId, "TRANSCRIPTION");
+            String text = transcriptions.transcribe(audio, usage -> costs.complete(operation, usage));
             append(userId, sessionId, new TranscriptSegmentRequest(sequenceNumber, text, source.speaker()));
             log.info("Audio chunk transcribed callId={} tenantId={} source={} sequenceNumber={} durationMs={}", sessionId, identity.tenantId(), source, sequenceNumber, elapsedMillis(startedAt));
             return new TranscribedSegmentResponse(sequenceNumber, source.speaker(), text);
@@ -98,7 +100,8 @@ public class CallService {
         Integer through = jdbc.queryForObject("select coalesce(max(sequence_number), 0) from transcript_segments where call_session_id=? and tenant_id=?", Integer.class, sessionId, identity.tenantId());
         long startedAt = System.nanoTime();
         try {
-            CallSuggestionResponse suggestion = suggestions.generate(identity.id(), request.contextSummary(), preparationFor(sessionId, identity.tenantId()), List.copyOf(segments), through == null ? 0 : through);
+            UUID operation = costs.begin(identity, sessionId, "SUGGESTION");
+            CallSuggestionResponse suggestion = suggestions.generateMetered(identity.id(), request.contextSummary(), preparationFor(sessionId, identity.tenantId()), List.copyOf(segments), through == null ? 0 : through, usage -> costs.complete(operation, usage));
             log.info("Suggestion generated callId={} tenantId={} durationMs={} segmentCount={}", sessionId, identity.tenantId(), (System.nanoTime() - startedAt) / 1_000_000, segments.size());
             return suggestion;
         } catch (OpenAiSuggestionClient.SuggestionUnavailableException exception) {

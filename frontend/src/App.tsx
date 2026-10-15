@@ -1,3 +1,4 @@
+import { CostsButton, CostsPage } from './CostsPage'
 import { AUDIO_CHUNK_MAX_MS, AUDIO_CHUNK_MIN_MS, AUDIO_PAUSE_MS, SUGGESTION_DELAY_MS, SUGGESTION_INTERVAL_MS, SUGGESTION_MAX_AGE_MS, recordCallTiming, hasUsefulSpeech } from './callTiming'
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
@@ -15,6 +16,7 @@ const routes = {
   register: '/app/cadastro',
   terms: '/app/termos',
   meetings: '/app/reunioes',
+  costs: '/app/custos',
   knowledgeBases: '/app/bases-de-conhecimento',
 }
 
@@ -957,6 +959,7 @@ function HomePage() {
     <ErrorNotice message={transcriptionErrors.microphone ? `Microfone: ${transcriptionErrors.microphone}` : null} />
     <ErrorNotice message={transcriptionErrors.tab ? `Áudio da aba: ${transcriptionErrors.tab}` : null} />
     <header className="call-topbar" aria-label="Sua conta">
+      <CostsButton />
       <button type="button" className="client-identity" onClick={() => setProfileOpen(true)} aria-label="Abrir seu perfil"><span className="client-avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : initials(account.name)}</span><span><strong>{account.name}</strong><small>{accountContext}</small></span></button>
     </header>
     <section className="meeting-toolbar" aria-label="Controles da reunião">
@@ -1023,8 +1026,16 @@ function HomePage() {
 
 function HistoryHeader({ account }: { account: Account }) {
   return <header className="history-topbar">
+    <CostsButton />
     <span className="history-account">{account.name}</span>
   </header>
+}
+
+function CostsRoute() {
+  const [account, setAccount] = useState<Account | null>(null)
+  useEffect(() => { api.me().then(setAccount).catch(() => window.location.replace(routes.login)) }, [])
+  if (!account) return <div className="loading-page" role="status">Carregando custos…</div>
+  return <AuthenticatedShell account={account} onAccountChange={setAccount}><CostsPage /></AuthenticatedShell>
 }
 
 function KnowledgeBasesRoute() {
@@ -1104,6 +1115,7 @@ export function App() {
   if (path === routes.register) return <RegisterPage />
   if (path === routes.login) return <LoginPage />
   if (path === routes.knowledgeBases) return <KnowledgeBasesRoute />
+  if (path === routes.costs) return <CostsRoute />
   if (path === routes.meetings) return <MeetingHistoryPage />
   const meetingDetail = path.match(/^\/app\/reunioes\/([^/]+)$/)
   if (meetingDetail) return <MeetingDetailPage sessionId={meetingDetail[1]} />
