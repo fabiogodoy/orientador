@@ -16,3 +16,6 @@ npm run build, npm test; após build, preview local em porta exclusiva e npm run
 
 ## Evidências e regressão
 Saídas dos comandos e screenshots em frontend/test-results, logs locais em .scratch/organizar-barra-reuniao. Conferir perfil, edição, controles e configurações. Testar atualização por relógio/foco e cleanup. Encerrar servidor próprio ao concluir. Aprovação depende de todos RF/RN cobertos e execução sem falhas.
+
+## Refinamento — 2026-10-15
+Atualizar cenário existente: nenhum logo nos cabeçalhos autenticados, logo presente no menu; usuário continua à direita e não sobrepõe o botão mobile. Executar build, Vitest e meeting-toolbar.spec.ts (três cenários), auditoria e revisão visual.

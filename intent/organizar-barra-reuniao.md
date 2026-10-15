@@ -24,3 +24,6 @@ Riscos: overflow em telas pequenas, edição do título e controles afetados por
 
 ## Alternativas, indicadores e aprovação
 Manter a barra atual perpetua a dor; não há alternativa operacional que restaure os elementos ausentes. Não há indicadores formais no projeto; espera-se reduzir dúvidas de uso/prazo. Sem perguntas em aberto. Problema, valor e objetivo aprovados; próxima etapa: PRD.
+
+## Refinamento confirmado em 2026-10-15
+O usuário pediu retirar a duplicação da marca no topo e mantê-la apenas no menu da área autenticada. Refinamento da mesma Intent, sem decisão aberta.

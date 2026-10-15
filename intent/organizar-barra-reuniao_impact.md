@@ -36,3 +36,6 @@ Individuais e organizações recuperam acesso visual ao prazo e controles legív
 
 ## Rollback e decisão
 Reverter commit da entrega e reconstruir frontend. Testes descritos no PRD/plano. ADR dispensado: sem decisão arquitetural, integração, dependência ou alteração de domínio. Impactos identificados e mitigados; recomendado implementar após Architecture Review.
+
+## Impacto do refinamento — 2026-10-15
+Remover a marca dos cabeçalhos de reunião e histórico/detalhe e CSS específico sem uso. Preservar logo no menu e nas páginas públicas. Risco baixo de alinhamento mobile: atualizar teste existente de layout/rotas. Sem alteração de handlers, dados ou regras. Fetch confirma main sincronizada em d5936bb732b9f44c26bcfaeb514218b89ff5a35e; mesmas pendências externas preservadas. Ajuste direto na main.

@@ -8,3 +8,6 @@ Sem dependências, persistência ou chamadas novas. CSS acomoda nomes e título 
 Evidências: build aprovado; 50 testes Vitest passaram (4 skips preexistentes); 5 testes Playwright passaram, cobrindo layout 320–1920px, menu/logo, edição com erro e recuperação, captura sintética real e call longa. Reteste do menu passou após estabilizar a captura. Revisão visual de desktop, mobile, menu e reunião ativa concluída. git diff --check sem erros.
 
 Limite preexistente: build avisa sobre chunk lazy de PDF acima de 500 kB. Fora do escopo: GroqTranscriptionClient.java e .scratch/. Sem mudanças em banco/consultas, autenticação ou tenant_id.
+
+## Refinamento — 2026-10-15: APROVADO
+Removida a marca duplicada da reunião e HistoryHeader; seletores sem uso excluídos. Perfil mantém margem automática à direita e ocupa o espaço disponível no mobile sem sobrepor Abrir menu. Build aprovado; 50 testes passaram (4 skips preexistentes); três cenários Playwright passaram em 4,4 s. Inspeção visual desktop aprovada; nenhuma alteração de handler.

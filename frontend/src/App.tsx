@@ -957,7 +957,6 @@ function HomePage() {
     <ErrorNotice message={transcriptionErrors.microphone ? `Microfone: ${transcriptionErrors.microphone}` : null} />
     <ErrorNotice message={transcriptionErrors.tab ? `Áudio da aba: ${transcriptionErrors.tab}` : null} />
     <header className="call-topbar" aria-label="Sua conta">
-      <a className="call-brand" href={routes.home} aria-label="Orientador — tela da call"><img src={logoUrl} alt="Orientador" /></a>
       <button type="button" className="client-identity" onClick={() => setProfileOpen(true)} aria-label="Abrir seu perfil"><span className="client-avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : initials(account.name)}</span><span><strong>{account.name}</strong><small>{accountContext}</small></span></button>
     </header>
     <section className="meeting-toolbar" aria-label="Controles da reunião">
@@ -1024,7 +1023,6 @@ function HomePage() {
 
 function HistoryHeader({ account }: { account: Account }) {
   return <header className="history-topbar">
-    <a className="call-brand" href={routes.home} aria-label="Orientador — tela da call"><img src={logoUrl} alt="Orientador" /></a>
     <span className="history-account">{account.name}</span>
   </header>
 }

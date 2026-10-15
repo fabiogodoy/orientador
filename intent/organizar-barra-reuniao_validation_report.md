@@ -7,7 +7,7 @@ Intent: `intent/organizar-barra-reuniao.md`.
 PRD: `intent/organizar-barra-reuniao_prd.md`.
 
 ## Resumo executivo e status geral
-APROVADO. O usuário confirmou a disposição antes da implementação. O topo contém marca e perfil à direita; faixa abaixo reúne título editável, estado, tempo e ferramentas. Menu usa a marca clara e informa dias restantes e término da avaliação. Layout verificado em nove larguras de 320 a 1920 px.
+APROVADO. O usuário confirmou a disposição antes da implementação. O topo contém apenas o perfil à direita; a marca fica somente no menu; faixa abaixo reúne título editável, estado, tempo e ferramentas. Menu usa a marca clara e informa dias restantes e término da avaliação. Layout verificado em nove larguras de 320 a 1920 px.
 
 ## Cobertura da Intent e do PRD
 Problema resolvido: sim. 4 de 4 RF implementados, 100%; nenhuma pendência funcional.
@@ -79,3 +79,10 @@ Sem divergências funcionais ou débito novo. Esta conversa já é exclusiva da 
 ## Parecer e checklist de liberação
 APROVADO: Intent/PRD/RF/RN atendidos; build, testes, aplicação e auditoria executados; implementação, segurança e observabilidade aprovadas; branch reintegrada e código publicado em origin/main; pendências externas preservadas. Sem risco impeditivo identificado.
 Rollback: reverter `01dc98c` e reconstruir frontend; não envolve migration ou dados.
+
+## Refinamento solicitado: logo apenas no menu — 2026-10-15
+RF001 atualizado a pedido direto do usuário, atendido: removida marca de HomePage e HistoryHeader. Marca do menu e páginas públicas preservadas. Demais RF/RN continuam atendidos.
+Build e Vitest reexecutados: aprovados, 50 testes passaram e 4 skips preexistentes. Playwright meeting-toolbar.spec.ts: 3 passaram em 4,4 s; nove larguras, perfil à direita sem sobreposição ao menu mobile, nenhuma logo no cabeçalho e somente uma nas rotas autenticadas. Edição, falha e recuperação também aprovadas. Auditoria e diff-check aprovados.
+Arquivos desta revisão: frontend/src/App.tsx, frontend/src/styles.css, frontend/tests/meeting-toolbar.spec.ts e documentos do mesmo slug: Intent, PRD, Impact, Architecture Review, Test Plan, Implementation Review, Security Review, Observability Review e este Validation Report. Sem alteração em TrialNotice.
+Evidências: .scratch/organizar-barra-reuniao/sem-logo-topo/. Preview local encerrado após testes; sem deploy de produção.
+Sincronização: origin/main d5936bb732b9f44c26bcfaeb514218b89ff5a35e; integração direta na main, preservando GroqTranscriptionClient.java e .scratch/. Publicação registrada no complemento abaixo após o push.

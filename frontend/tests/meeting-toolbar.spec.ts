@@ -51,7 +51,8 @@ test('separa conta e reunião, mantém título longo e controles sem sobreposiç
     const profile = header.getByRole('button', { name: 'Abrir seu perfil' })
     const profileBox = (await profile.boundingBox())!
     expect(top.x + top.width - profileBox.x - profileBox.width).toBeLessThan(65)
-    await expectNoOverlap([header.getByRole('link'), profile])
+    await expect(header.getByRole('img', { name: 'Orientador' })).toHaveCount(0)
+    if (width <= 850) await expectNoOverlap([page.getByRole('button', { name: 'Abrir menu' }), profile])
     await expectNoOverlap([
       toolbar.locator('.meeting-title'), toolbar.locator('.meeting-status'),
       toolbar.getByRole('button', { name: 'Escutar microfone', exact: true }),
@@ -96,6 +97,7 @@ test('logo clara e período gratuito disponíveis no menu e nas rotas autenticad
   for (const route of ['/app/reunioes', '/app/bases-de-conhecimento']) {
     await page.goto(route)
     await expect(sidebar.getByText('3 dias grátis restantes')).toBeVisible()
+    await expect(page.getByRole('img', { name: 'Orientador', exact: true })).toHaveCount(1)
   }
   await page.goto('/app/')
   await page.setViewportSize({ width: 390, height: 600 })
