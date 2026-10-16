@@ -48,3 +48,6 @@ Sem VAD, detecção de voz local depende da transcrição retornar: uma resposta
 
 ## Reintegração e pendências externas
 Alteração direta na main permitida pelo projeto. Base32a36be sincronizada com origin/main por fetch antes da implementação. Pendências externas preservadas: alteração preexistente em backend/src/main/java/br/com/connectas/orientador/call/GroqTranscriptionClient.java e .scratch/. Nada disso integra staging/commit. Publicação e parecer final serão registrados após auditoria e push.
+
+## Parecer final e publicação
+**APROVADO.** Intent,5RF,RN,build,componentes,E2E,reviews,ambiente e auditoria OK. Auditoria `scripts/governance-audit.sh`: TUDO OK; `git diff --check`: sem erro. Main de origem `32a36be`; integração direta na main, sem branch/merge adicional. SHA da implementação `12019644c7901075ef2a6e8cff25d1fb5e3d2680`. Push confirmado: `32a36be..1201964 main -> main`. Este complemento é documental; seu SHA final é identificado pela revisão Git deste relatório. Frontend local serve o código atualizado; recarregar antes da próxima call. Sem deploy de produção.
