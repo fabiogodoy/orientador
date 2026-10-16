@@ -1,0 +1,6 @@
+# Intent — Sugestões descartadas em conversa contínua
+2026-10-16. Status: aprovada para correção do defeito relatado. Slug: sugestoes-descartadas-em-conversa.
+
+Usuário relata duas reuniões consecutivas com mais de 20 minutos até ver orientação e apenas 2–3 sugestões. Logs locais de hoje mostram 167 e 97 respostas concluídas, primeiras às 08:02:21 e 09:02:23; não registram ação do modelo nem exibição no navegador. Logo não permitem atribuir todo o incidente a uma causa única. Código invalida inferências por retomada de áudio e blocos remotos novos, mesmo dentro da janela útil. Testes existentes usam respostas imediatas e não exigem progresso com latência realista.
+
+Objetivo: permitir orientação útil durante conversa contínua, sem mostrar retorno de outra call ou referente a fala já respondida. Perfis: todos os usuários de calls. Resultado verificável: respostas de 9s com blocos de 8s aparecem repetidamente, respeitando expiração e fala local. Sem mudar modelo, preços, API, armazenamento ou forçar FALAR no lugar de OUVIR. Pedido de correção e comportamento esperado da assistência em tempo real constituem autorização; pergunta opcional sobre estado visual não bloqueia reprodução técnica. Nenhuma decisão de negócio necessária para corrigir este defeito. Mesmo chat por restrição da ferramenta à criação de chats sem pedido; slug delimita a frente.

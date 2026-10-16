@@ -448,6 +448,7 @@ function HomePage() {
   const completedSegments = useRef(new Set<number>())
   const completedThrough = useRef(0)
   const [guidanceListening, setGuidanceListening] = useState(false)
+  const [guidanceWaiting, setGuidanceWaiting] = useState(false)
   const pendingSuggestionTimer = useRef<number | null>(null)
   const transcriptScrollRef = useRef<HTMLDivElement>(null)
   const guidanceScrollRef = useRef<HTMLDivElement>(null)
@@ -546,6 +547,7 @@ function HomePage() {
     contextSummary.current = { value: '', through: 0 }
     invalidateSuggestion()
     setGuidanceListening(false)
+    setGuidanceWaiting(false)
     setSuggestions([])
     setSuggestionLoading(false)
     setSuggestionError(null)
@@ -571,6 +573,7 @@ function HomePage() {
     contextSummary.current = { value: '', through: 0 }
     invalidateSuggestion()
     setGuidanceListening(false)
+    setGuidanceWaiting(false)
     setSuggestions([])
     setSuggestionLoading(false)
     setSuggestionError(null)
@@ -608,6 +611,7 @@ function HomePage() {
         latestUserSpeechAt.current = -Infinity
         lastSuggestionStartedAt.current = -Infinity
         setGuidanceListening(false)
+        setGuidanceWaiting(false)
       }
       sessionStart.current = api.startCall(meetingTitleRef.current, preparation.current)
     }
@@ -641,7 +645,8 @@ function HomePage() {
     queuedSuggestion.current = null
     suggestionRequest.current += 1
     setSuggestionLoading(suggestionInFlight.current)
-    setGuidanceListening(true)
+    setGuidanceListening(false)
+    setGuidanceWaiting(true)
     setSuggestionError(null)
   }
 
@@ -649,7 +654,6 @@ function HomePage() {
     latestUserSpeechAt.current = Math.max(latestUserSpeechAt.current, at)
     if (at >= latestRemoteSpeechAt.current) {
       invalidateSuggestion()
-      setGuidanceListening(true)
     }
   }
 
@@ -657,18 +661,17 @@ function HomePage() {
     if (!audio.size) return
     const closedAt = Date.now()
     const sequenceNumber = nextSegment.current++
-    if (source === 'microphone') noteUserSpeech(speechEndedAt)
     const write = api.transcribeAudio(sessionId, source, sequenceNumber, audio).then(response => {
       recordCallTiming('transcription', closedAt)
       if (callSessionId.current !== sessionId) return
       updateTranscriptionError(source, sessionId, sequenceNumber, null)
+      if (source === 'microphone' && response.text.trim()) noteUserSpeech(speechEndedAt)
       const speaker = speakerForSource[source]
       setLiveMessages(current => [...current, { speaker, time: formatDuration(elapsedSecondsRef.current), text: response.text, source, sequenceNumber }].sort((a, b) => a.sequenceNumber - b.sequenceNumber))
       if (source === 'tab' && sequenceNumber > (latestClientSegment.current ?? 0)) {
         latestClientSegment.current = sequenceNumber
         latestRemoteClosedAt.current = closedAt
         latestRemoteSpeechAt.current = speechEndedAt
-        invalidateSuggestion()
         if (hasUsefulSpeech(response.text) && speechEndedAt > latestUserSpeechAt.current) scheduleSuggestion(sessionId, sequenceNumber)
       }
     }).catch(cause => {
@@ -715,28 +718,33 @@ function HomePage() {
     const requestNumber = ++suggestionRequest.current
     const startedAt = Date.now()
     const originAt = manual ? startedAt : latestRemoteClosedAt.current
+    const originSpeechAt = latestRemoteSpeechAt.current
     const summaryThrough = completedThrough.current
     lastSuggestionStartedAt.current = startedAt
     setSuggestionLoading(true)
     setSuggestionError(null)
-    const stillCurrent = () => requestNumber === suggestionRequest.current && latestClientSegment.current === segmentNumber
-      && callSessionId.current === sessionId && Date.now() - originAt <= SUGGESTION_MAX_AGE_MS
-      && (manual || !sourceCaptures.current.microphone?.speaking)
+    const discardReason = () => {
+      if (callSessionId.current !== sessionId) return 'session_changed' as const
+      if (requestNumber !== suggestionRequest.current || (!manual && (latestUserSpeechAt.current >= originSpeechAt || sourceCaptures.current.microphone?.speaking))) return 'local_speech' as const
+      if (Date.now() - originAt > SUGGESTION_MAX_AGE_MS) return 'expired' as const
+      return undefined
+    }
     try {
       const response = await api.generateSuggestion(sessionId, contextSummary.current.value, contextSummary.current.through)
-      const current = stillCurrent()
-      recordCallTiming('suggestion', startedAt, current ? 'completed' : 'discarded')
-      if (current) {
+      const reason = discardReason()
+      const listening = response.acao === 'OUVIR' || response.tipo === 'Ouvir'
+      recordCallTiming('suggestion', startedAt, reason ? 'discarded' : 'completed', reason ?? (listening ? 'listen' : 'speak'))
+      if (!reason) {
         // Never advance past an upload that was still pending when this request started.
         contextSummary.current = { value: response.contextSummary, through: Math.min(response.summarizedThrough, summaryThrough) }
-        const listening = response.acao === 'OUVIR' || response.tipo === 'Ouvir'
+        setGuidanceWaiting(false)
         setGuidanceListening(listening)
         if (!listening) setSuggestions(current => [...current.filter(entry => entry.segmentNumber !== segmentNumber), { segmentNumber, suggestion: response }])
         recordCallTiming('guidance', originAt)
       }
     } catch (cause) {
       recordCallTiming('suggestion', startedAt, 'failed')
-      if (stillCurrent()) setSuggestionError(cause instanceof ApiError ? cause.message : 'Não foi possível gerar a sugestão agora. Tente novamente em instantes.')
+      if (!discardReason()) setSuggestionError(cause instanceof ApiError ? cause.message : 'Não foi possível gerar a sugestão agora. Tente novamente em instantes.')
     } finally {
       suggestionInFlight.current = false
       setSuggestionLoading(false)
@@ -841,7 +849,6 @@ function HomePage() {
         if (rms >= SPEECH_RMS_THRESHOLD) {
           capture.hasAudibleSignal = true
           capture.lastSpeechAt = now
-          if (source === 'tab' && !capture.speaking) invalidateSuggestion()
           if (source === 'microphone') {
             if (!capture.speaking) noteUserSpeech(now)
             latestUserSpeechAt.current = now
@@ -1000,18 +1007,19 @@ function HomePage() {
       </section>
 
       <section className="workspace-panel guidance-panel" aria-labelledby="guidance-title">
-        <header className="panel-header"><div><span className="panel-kicker ai-kicker"><Icon name="sparkles" size={17} />Orientação da IA</span><h2 id="guidance-title">Próxima melhor resposta</h2></div><span className="last-speech">Com base na última fala</span></header>
+        <header className="panel-header"><div><span className="panel-kicker ai-kicker"><Icon name="sparkles" size={17} />Orientação da IA</span><h2 id="guidance-title">Próxima melhor resposta</h2></div><span className="last-speech">Com base na conversa recente</span></header>
         <div className="guidance-scroll" ref={guidanceScrollRef} onScroll={() => handlePanelScroll('guidance')}>
-          {!currentSuggestion && !guidanceListening && !suggestionLoading && !suggestionError && <p className="guidance-empty" role="status">Aguardando a primeira fala do interlocutor para orientar sua próxima resposta.</p>}
+          {!currentSuggestion && !guidanceListening && !guidanceWaiting && !suggestionLoading && !suggestionError && <p className="guidance-empty" role="status">Aguardando a primeira fala do interlocutor para orientar sua próxima resposta.</p>}
+          {guidanceWaiting && isCallActive && !suggestionLoading && <p className="guidance-empty" role="status">Aguardando uma nova fala do interlocutor.</p>}
           {guidanceListening && !suggestionLoading && <p className="guidance-empty" role="status">Continue ouvindo. Não é necessário intervir agora.</p>}
-          {suggestionLoading && <p className="guidance-empty" role="status">Preparando uma sugestão para a última fala do interlocutor…</p>}
+          {suggestionLoading && <p className="guidance-empty" role="status">Preparando uma sugestão para a conversa…</p>}
           {isCallActive && suggestionError && <div className="guidance-empty guidance-error" role="status"><p>{suggestionError}</p><button type="button" className="subtle-button" onClick={regenerateSuggestion}>Tentar novamente</button></div>}
           {suggestions.map((entry, index) => <article className="suggestion-card" key={entry.segmentNumber}>
             <div className="client-quote"><span aria-hidden="true">“</span><div><small>INTERLOCUTOR DISSE</small><p>{entry.suggestion.trechoCliente}</p></div></div>
-            <div className="suggestion-topline"><span className="suggestion-tag">{entry.suggestion.tipo}</span><span className="suggestion-context">{index === suggestions.length - 1 && !guidanceListening ? 'Baseada na última fala' : 'Sugestão anterior'}</span></div>
+            <div className="suggestion-topline"><span className="suggestion-tag">{entry.suggestion.tipo}</span><span className="suggestion-context">{index === suggestions.length - 1 && !guidanceListening && !guidanceWaiting ? 'Baseada em fala recente' : 'Sugestão anterior'}</span></div>
             <p className="suggested-response">{entry.suggestion.proximaFala}</p>
             <div className="key-points"><h3>O que vale manter na resposta</h3><ul>{entry.suggestion.pontosChave.map(point => <li key={point}>{point}</li>)}</ul></div>
-            {index === suggestions.length - 1 && !guidanceListening && <footer className="suggestion-actions"><button type="button" className="subtle-button" onClick={() => void copySuggestion()}><Icon name="copy" size={16} />{copied ? 'Copiado' : 'Copiar resposta'}</button><button type="button" className="subtle-button" onClick={regenerateSuggestion}><Icon name="sparkles" size={16} />Gerar outra</button><small>Gerada agora</small></footer>}
+            {index === suggestions.length - 1 && !guidanceListening && !guidanceWaiting && <footer className="suggestion-actions"><button type="button" className="subtle-button" onClick={() => void copySuggestion()}><Icon name="copy" size={16} />{copied ? 'Copiado' : 'Copiar resposta'}</button><button type="button" className="subtle-button" onClick={regenerateSuggestion}><Icon name="sparkles" size={16} />Gerar outra</button><small>Gerada agora</small></footer>}
           </article>)}
           {!scrollFollowing.guidance && <button type="button" className="scroll-latest-button" onClick={() => scrollToLatest('guidance', 'smooth', true)}>Voltar ao mais recente <span aria-hidden="true">↓</span></button>}
         </div>

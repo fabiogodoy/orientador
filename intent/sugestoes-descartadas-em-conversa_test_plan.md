@@ -1,0 +1,2 @@
+# Test Plan — Sugestões descartadas em conversa contínua
+Reprodução antes do fix: blocos remotos de8s e inferência9s por120s; microfone fallback vazio durante pedido. Cobrir retomada de voz via Web Audio, fila única/último trecho, resumo limitado ao watermark, fala local, fim/nova call, expiração12s e OUVIR. Unitários/componentes Vitest; build frontend antes de Playwright; E2E com resposta pendente cruzando novos blocos e regressão de130 blocos. Nenhum banco persistente ou provedor real usado. Evidências em .scratch/sugestoes-descartadas-em-conversa.

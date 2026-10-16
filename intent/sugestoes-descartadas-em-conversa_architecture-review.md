@@ -1,0 +1,2 @@
+# Architecture Review — Sugestões descartadas em conversa contínua
+2026-10-16. APROVADA antes da implementação. Corrigir elegibilidade no frontend onde reside a máquina de estados; não mudar prompt/modelo para contornar falha de exibição. Reutilizar fila e limite temporal, manter cancelamento por sessão/fala local. Diagnóstico em buffer limitado já existente; zero dependências e migrations. Complexidade média pelo controle temporal, escopo pequeno.

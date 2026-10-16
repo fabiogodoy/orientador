@@ -6,16 +6,17 @@ export const SUGGESTION_INTERVAL_MS = 5000
 export const SUGGESTION_MAX_AGE_MS = 12000
 
 type Stage = 'capture' | 'transcription' | 'suggestion' | 'guidance'
-type Timing = { stage: Stage; durationMs: number; outcome: 'completed' | 'discarded' | 'failed' }
+type TimingReason = 'session_changed' | 'local_speech' | 'expired' | 'speak' | 'listen'
+type Timing = { stage: Stage; durationMs: number; outcome: 'completed' | 'discarded' | 'failed'; reason?: TimingReason }
 const timings: Timing[] = []
 
 // Diagnostic data stays in memory and contains no call identifiers or content.
-export function recordCallTiming(stage: Stage, startedAt: number, outcome: Timing['outcome'] = 'completed') {
+export function recordCallTiming(stage: Stage, startedAt: number, outcome: Timing['outcome'] = 'completed', reason?: TimingReason) {
   const durationMs = Math.max(0, Date.now() - startedAt)
-  timings.push({ stage, durationMs, outcome })
+  timings.push({ stage, durationMs, outcome, ...(reason ? { reason } : {}) })
   const name = `orientador.${stage}`
   if (performance.getEntriesByName(name, 'measure').length >= 50) performance.clearMeasures(name)
-  performance.measure(name, { start: Math.max(0, performance.now() - durationMs), duration: durationMs, detail: { outcome } })
+  performance.measure(name, { start: Math.max(0, performance.now() - durationMs), duration: durationMs, detail: { outcome, ...(reason ? { reason } : {}) } })
   if (timings.length > 200) timings.shift()
 }
 export function getCallTimings(): readonly Timing[] { return timings.map(timing => ({ ...timing })) }

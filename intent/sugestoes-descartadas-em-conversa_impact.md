@@ -1,0 +1,4 @@
+# Impact Analysis — Sugestões descartadas em conversa contínua
+2026-10-16. Frontend App.tsx, callTiming.ts, testes e governança. Backend/landing/schema/credenciais não alterados. Reutiliza captura, fila, API e medidas User Timing. Monorepo; fetch executado; main em 32a36be contém origin/main. Pendências externas: GroqTranscriptionClient.java e .scratch/ preservadas fora do commit.
+
+Risco médio de regressão temporal: manter invalidação local e por sessão/idade, fila única e resumo seguro, testar com relógio controlado. Nenhuma mudança de autorização, tenant ou consulta. Menos desperdício de inferências já concluídas, sem alterar frequência máxima. Operação: motivos efêmeros de descarte permitem diferenciar ausência de exibição de OUVIR. Não há dado suficiente para reconstruir ações históricas; logs mostram conclusões no backend. Sem ADR (correção de controle local, sem arquitetura/integração/dependência nova). Uma integração; rollback via revert.

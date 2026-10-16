@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import { api, ApiError } from './api'
+import { getCallTimings } from './callTiming'
 
 vi.mock('./api', async importOriginal => {
   const original = await importOriginal<typeof import('./api')>()
@@ -39,6 +40,44 @@ beforeEach(() => {
   vi.mocked(api.generateSuggestion).mockImplementation(async (_id, _summary, through) => suggestion(through + 1))
 })
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.resetAllMocks(); vi.unstubAllGlobals() })
+
+it('continua exibindo orientações com blocos de 8s e inferências de 9s', async () => {
+  await start('tab', true)
+  let attempts = 0
+  let active = 0
+  let maxActive = 0
+  vi.mocked(api.generateSuggestion).mockImplementation(() => {
+    const number = ++attempts
+    active++
+    maxActive = Math.max(maxActive, active)
+    return new Promise(resolve => window.setTimeout(() => { active--; resolve(suggestion(number)) }, 9000))
+  })
+  await act(async () => { await vi.advanceTimersByTimeAsync(17300) })
+  expect(screen.getByText('Orientação 1')).toBeVisible()
+  await act(async () => { await vi.advanceTimersByTimeAsync(72700) })
+  const beforeFinalWindow = screen.getAllByText(/^Orientação \d+$/).length
+  await act(async () => { await vi.advanceTimersByTimeAsync(30000) })
+  // Some coalesced requests can expire at 12s, but continuous speech must make progress.
+  expect(screen.getAllByText(/^Orientação \d+$/).length).toBeGreaterThanOrEqual(5)
+  expect(screen.getAllByText(/^Orientação \d+$/).length).toBeGreaterThan(beforeFinalWindow)
+  expect(maxActive).toBe(1)
+  expect(vi.mocked(api.generateSuggestion).mock.calls[1][1]).toBe('Resumo 1')
+  expect(getCallTimings().some(timing => timing.stage === 'suggestion' && timing.outcome === 'completed' && timing.reason === 'speak')).toBe(true)
+})
+
+it.each(['empty', 'failed'])('microfone sem detector com resultado %s não cancela sugestão remota', async result => {
+  await start('tab', true)
+  let resolve!: (value: ReturnType<typeof suggestion>) => void
+  vi.mocked(api.generateSuggestion).mockImplementationOnce(() => new Promise(done => { resolve = done }))
+  await act(async () => Recorder.instances[0].emit())
+  await act(async () => { await vi.advanceTimersByTimeAsync(300) })
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Escutar microfone' })))
+  if (result === 'failed') vi.mocked(api.transcribeAudio).mockRejectedValueOnce(new ApiError('TRANSCRIPTION_UNAVAILABLE', 'Sem fala reconhecida'))
+  else vi.mocked(api.transcribeAudio).mockResolvedValueOnce({ sequenceNumber: 2, speaker: 'USER', text: '   ' })
+  await act(async () => Recorder.instances[1].emit())
+  await act(async () => resolve(suggestion(1)))
+  expect(screen.getByText('Orientação 1')).toBeVisible()
+})
 
 async function start(source: 'tab' | 'microphone' = 'tab', simulatedClock = false) {
   render(<App />)
@@ -119,10 +158,10 @@ it('gera após 300 ms, coalesce o último segmento e não sobrepõe chamadas', a
   await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
   expect(api.generateSuggestion).toHaveBeenCalledTimes(1)
   await act(async () => resolve(suggestion(1)))
-  expect(screen.queryByText('Orientação 1')).not.toBeInTheDocument()
+  expect(screen.getByText('Orientação 1')).toBeInTheDocument()
   await act(async () => { await vi.advanceTimersByTimeAsync(300) })
   expect(api.generateSuggestion).toHaveBeenCalledTimes(2)
-  expect(vi.mocked(api.generateSuggestion).mock.calls[1]).toEqual(['call-1', '', 0])
+  expect(vi.mocked(api.generateSuggestion).mock.calls[1]).toEqual(['call-1', 'Resumo 1', 1])
 })
 
 it('invalida orientação pendente quando o usuário começa a responder', async () => {
@@ -135,7 +174,8 @@ it('invalida orientação pendente quando o usuário começa a responder', async
   await act(async () => Recorder.instances[1].emit())
   await act(async () => resolve(suggestion(1)))
   expect(screen.queryByText('Orientação 1')).not.toBeInTheDocument()
-  expect(screen.getByText('Continue ouvindo. Não é necessário intervir agora.')).toBeVisible()
+  expect(screen.getByText('Aguardando uma nova fala do interlocutor.')).toBeVisible()
+  expect(screen.queryByText('Continue ouvindo. Não é necessário intervir agora.')).not.toBeInTheDocument()
 })
 
 it('permite manual após confirmação curta e representa Ouvir sem fala para copiar', async () => {
@@ -150,6 +190,7 @@ it('permite manual após confirmação curta e representa Ouvir sem fala para co
   await act(async () => fireEvent.click(button))
   expect(screen.getByText('Continue ouvindo. Não é necessário intervir agora.')).toBeVisible()
   expect(screen.queryByRole('button', { name: 'Copiar resposta' })).not.toBeInTheDocument()
+  expect(getCallTimings().filter(timing => timing.stage === 'suggestion').at(-1)).toMatchObject({ outcome: 'completed', reason: 'listen' })
 })
 
 it('ordena transcrições e não avança resumo sobre upload pendente', async () => {
@@ -179,6 +220,7 @@ it('descarta orientação que ultrapassou a janela útil', async () => {
   await act(async () => { await vi.advanceTimersByTimeAsync(12000); resolve(suggestion(1)) })
   expect(screen.queryByText('Orientação 1')).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Sugerir agora' })).toBeEnabled()
+  expect(getCallTimings().filter(timing => timing.stage === 'suggestion').at(-1)).toMatchObject({ outcome: 'discarded', reason: 'expired' })
 })
 
 it('fecha em pausa após 5 s, ignora pausas curtas e não envia silêncio', async () => {
@@ -244,4 +286,44 @@ it('não sugere fala remota antiga fechada depois de o usuário já responder', 
   await act(async () => { await vi.advanceTimersByTimeAsync(3300) })
   expect(api.transcribeAudio).toHaveBeenCalledTimes(2)
   expect(api.generateSuggestion).not.toHaveBeenCalled()
+})
+
+
+it('ignora retorno da reunião anterior depois de iniciar outra', async () => {
+  await start('tab', true)
+  let resolve!: (value: ReturnType<typeof suggestion>) => void
+  vi.mocked(api.generateSuggestion).mockImplementationOnce(() => new Promise(done => { resolve = done }))
+  await act(async () => Recorder.instances[0].emit())
+  await act(async () => { await vi.advanceTimersByTimeAsync(300) })
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Encerrar call' })))
+  vi.mocked(api.startCall).mockResolvedValueOnce({ sessionId: 'call-2', title: 'Segunda reunião' })
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Escutar áudio da aba' })))
+  await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Ignorar e iniciar' })))
+  await act(async () => resolve(suggestion(1)))
+  expect(screen.queryByText('Orientação 1')).not.toBeInTheDocument()
+  await act(async () => Recorder.instances.at(-1)!.emit())
+  await act(async () => { await vi.advanceTimersByTimeAsync(300) })
+  expect(vi.mocked(api.generateSuggestion).mock.calls.at(-1)).toEqual(['call-2', '', 0])
+  expect(screen.getByText('Orientação 1')).toBeVisible()
+})
+
+it('retomar voz remota durante a inferência não descarta orientação recente', async () => {
+  let audible = true
+  vi.stubGlobal('AudioContext', class {
+    createAnalyser() { return { fftSize: 1024, getByteTimeDomainData: (data: Uint8Array) => data.fill(audible ? 140 : 128) } }
+    createMediaStreamSource() { return { connect: vi.fn() } }
+    resume() { return Promise.resolve() }
+    close() { return Promise.resolve() }
+  })
+  await start('tab', true)
+  let resolve!: (value: ReturnType<typeof suggestion>) => void
+  vi.mocked(api.generateSuggestion).mockImplementationOnce(() => new Promise(done => { resolve = done }))
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+  audible = false
+  await act(async () => { await vi.advanceTimersByTimeAsync(4300) })
+  expect(api.generateSuggestion).toHaveBeenCalledTimes(1)
+  audible = true
+  await act(async () => { await vi.advanceTimersByTimeAsync(500) })
+  await act(async () => resolve(suggestion(1)))
+  expect(screen.getByText('Orientação 1')).toBeVisible()
 })
